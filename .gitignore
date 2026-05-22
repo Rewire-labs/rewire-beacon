@@ -1,0 +1,73 @@
+# --- Python ---------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+.eggs/
+build/
+dist/
+wheels/
+pip-wheel-metadata/
+*.whl
+.installed.cfg
+MANIFEST
+
+# --- venvs ----------------------------------------------------------------
+.venv/
+venv/
+env/
+ENV/
+
+# --- testing / coverage --------------------------------------------------
+.coverage
+.coverage.*
+.cache
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# --- IDE -----------------------------------------------------------------
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# --- environment ---------------------------------------------------------
+.env
+.env.*
+!.env.example
+
+# --- local dev databases / artifacts -------------------------------------
+*.db
+*.sqlite
+*.sqlite3
+beacon.dev.db
+*.log
+
+# --- node (for any V0.5+ UI) ---------------------------------------------
+node_modules/
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+pnpm-debug.log
+.next/
+.nuxt/
+dist/
+
+# --- OS ------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+
+# --- uv lock (we commit it — but ignore staging copies) ------------------
+.uv-cache/
+
+# --- docker --------------------------------------------------------------
+.docker/

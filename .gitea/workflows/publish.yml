@@ -1,0 +1,130 @@
+# -----------------------------------------------------------------------------
+# rewire-beacon — PUBLISH (Gitea Actions) — V0 ACTIVE (Distribution v2 local)
+#
+# 2026-05-21: V0 skeleton scaffolded. Push real pra 192.168.1.110:30500
+# (Distribution v2 OSS, cluster-local NodePort).
+# V1 (Harbor + Sigstore) reservado em steps `if: false` ate cluster Fase 3.
+# -----------------------------------------------------------------------------
+name: publish
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+
+env:
+  REGISTRY: "192.168.1.110:30500"
+  IMAGE_NS: "rewire-labs"
+  HARBOR_AVAILABLE: "false"
+
+jobs:
+  build:
+    name: Build + Publish (V0)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: derive version
+        id: ver
+        run: |
+          set -eu
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/v}"
+          else
+            VERSION="dev-$(git rev-parse --short HEAD)"
+          fi
+          SHA_LONG="${{ github.sha }}"
+          SHA_SHORT="$(echo "${SHA_LONG}" | cut -c1-12)"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "sha_long=${SHA_LONG}" >> "$GITHUB_OUTPUT"
+          echo "sha_short=${SHA_SHORT}" >> "$GITHUB_OUTPUT"
+
+      - name: Configure docker daemon (insecure-registry V0)
+        run: |
+          set -eu
+          sudo mkdir -p /etc/docker
+          cat <<EOF | sudo tee /etc/docker/daemon.json
+          {
+            "insecure-registries": ["192.168.1.110:30500"]
+          }
+          EOF
+          sudo systemctl restart docker || sudo service docker restart || true
+
+      - name: docker buildx setup
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: |
+            network=host
+            image=moby/buildkit:v0.13.1
+
+      - name: build + push control-plane
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/control-plane/Dockerfile
+          platforms: linux/amd64
+          push: true
+          build-args: |
+            APP_VERSION=${{ steps.ver.outputs.version }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NS }}/rewire-beacon-control-plane:${{ steps.ver.outputs.version }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NS }}/rewire-beacon-control-plane:${{ steps.ver.outputs.sha_long }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NS }}/rewire-beacon-control-plane:${{ steps.ver.outputs.sha_short }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NS }}/rewire-beacon-control-plane:dev-latest
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            rewire.io/product=beacon
+            rewire.io/component=control-plane
+            rewire.io/registry-tier=v0-distribution-v2
+          cache-from: type=gha,scope=beacon-control-plane
+          cache-to: type=gha,mode=max,scope=beacon-control-plane
+
+      - name: trivy scan (V0 — nao bloqueia)
+        if: always()
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: CRITICAL,HIGH
+          exit-code: '0'
+          format: json
+          output: trivy-report.json
+          ignore-unfixed: true
+
+      - name: upload trivy report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-report-rewire-beacon
+          path: trivy-report.json
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: cosign sign (V1 only — Harbor + Sigstore)
+        if: env.HARBOR_AVAILABLE == 'true'
+        run: |
+          cosign sign --key vault://kv/cosign/beacon \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NS }}/rewire-beacon-control-plane:${{ steps.ver.outputs.version }}
+
+      - name: Summary V0 publish
+        if: always()
+        run: |
+          {
+            echo "## publish.yml — V0 ACTIVE (Distribution v2)"
+            echo ""
+            echo "Imagens publicadas em ${{ env.REGISTRY }}/${{ env.IMAGE_NS }}/:"
+            echo ""
+            echo '```'
+            echo "rewire-beacon-control-plane:${{ steps.ver.outputs.version }}"
+            echo "rewire-beacon-control-plane:${{ steps.ver.outputs.sha_short }}"
+            echo "rewire-beacon-control-plane:dev-latest"
+            echo '```'
+            echo ""
+            echo "V1 (cluster Fase 3): Harbor + Sigstore — flip HARBOR_AVAILABLE=true"
+          } >> "${GITHUB_STEP_SUMMARY}"
