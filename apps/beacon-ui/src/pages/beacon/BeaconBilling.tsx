@@ -1,8 +1,19 @@
+import { useEffect, useState } from "react";
 import { PageHeader, PageContainer, Card, Table, Th, Td } from "@/components/beacon/ui";
 import { BEACON_USER, BILLING_BREAKDOWN, TIER_LABELS } from "@/content/beacon-mock";
 import { Receipt, Download, FileText, TrendingUp } from "lucide-react";
+import { billing } from "@/lib/api";
 
 export default function BeaconBilling() {
+  const [usage, setUsage] = useState<Record<string, number> | null>(null);
+  useEffect(() => {
+    billing.usageMtd()
+      .then((u) => setUsage(u.counts))
+      .catch(() => setUsage(null));
+  }, []);
+  const liveEmail = usage?.email ?? BEACON_USER.mtd_email;
+  const liveSms = usage?.sms ?? BEACON_USER.mtd_sms;
+  const liveWa = usage?.whatsapp ?? BEACON_USER.mtd_wa;
   const total = BILLING_BREAKDOWN.reduce((s, b) => s + b.total_brl, 0);
   return (
     <PageContainer>
@@ -24,17 +35,17 @@ export default function BeaconBilling() {
         </Card>
         <Card className="p-4">
           <p className="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold">Email</p>
-          <p className="text-2xl font-bold mt-1">{BEACON_USER.mtd_email.toLocaleString("pt-BR")}</p>
+          <p className="text-2xl font-bold mt-1">{liveEmail.toLocaleString("pt-BR")}</p>
           <p className="text-[10px] text-zinc-500">de {BEACON_USER.mtd_email_quota.toLocaleString("pt-BR")}</p>
         </Card>
         <Card className="p-4">
           <p className="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold">SMS BR</p>
-          <p className="text-2xl font-bold mt-1">{BEACON_USER.mtd_sms.toLocaleString("pt-BR")}</p>
+          <p className="text-2xl font-bold mt-1">{liveSms.toLocaleString("pt-BR")}</p>
           <p className="text-[10px] text-zinc-500">de {BEACON_USER.mtd_sms_quota.toLocaleString("pt-BR")}</p>
         </Card>
         <Card className="p-4">
           <p className="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold">WhatsApp</p>
-          <p className="text-2xl font-bold mt-1">{BEACON_USER.mtd_wa.toLocaleString("pt-BR")}</p>
+          <p className="text-2xl font-bold mt-1">{liveWa.toLocaleString("pt-BR")}</p>
           <p className="text-[10px] text-zinc-500">de {BEACON_USER.mtd_wa_quota.toLocaleString("pt-BR")}</p>
         </Card>
       </div>

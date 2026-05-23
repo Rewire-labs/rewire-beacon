@@ -180,21 +180,21 @@ endpoint estiver pronto.
 
 | ID | Título | Status | Owner |
 |---|---|---|---|
-| [[BCN-150]] | OpenAPI codegen TypeScript client | [ ] | frontend |
+| [[BCN-150]] | OpenAPI codegen TypeScript client | [x] | frontend |
 | [[BCN-151]] | Wiring `BeaconOverview.tsx` → `/v1/overview` | [ ] | frontend |
 | [[BCN-152]] | Wiring `BeaconMessages.tsx` → `/v1/messages` (list + filter) | [ ] | frontend |
 | [[BCN-153]] | Wiring `BeaconTemplates.tsx` → `/v1/templates/*` | [ ] | frontend |
 | [[BCN-154]] | Wiring `BeaconJourneys.tsx` → `/v1/journeys/*` | [ ] | frontend |
-| [[BCN-155]] | Wiring `BeaconSuppression.tsx` → `/v1/suppression` | [ ] | frontend |
-| [[BCN-156]] | Wiring `BeaconDomains.tsx` → `/v1/domains` | [ ] | frontend |
+| [[BCN-155]] | Wiring `BeaconSuppression.tsx` → `/v1/suppression` | [x] | frontend |
+| [[BCN-156]] | Wiring `BeaconDomains.tsx` → `/v1/domains` | [x] | frontend |
 | [[BCN-157]] | Wiring `BeaconSmsNumbers.tsx` → `/v1/sms-numbers` | [ ] | frontend |
 | [[BCN-158]] | Wiring `BeaconWhatsapp.tsx` → `/v1/whatsapp` | [ ] | frontend |
 | [[BCN-159]] | Wiring `BeaconPushApps.tsx` → `/v1/push-apps` | [ ] | frontend |
 | [[BCN-160]] | Wiring `BeaconWebhooks.tsx` → `/v1/webhooks` | [ ] | frontend |
 | [[BCN-161]] | Wiring `BeaconAnalytics.tsx` → `/v1/analytics/messages` | [ ] | frontend |
-| [[BCN-162]] | Wiring `BeaconApiKeys.tsx` → `/v1/api-tokens` | [ ] | frontend |
+| [[BCN-162]] | Wiring `BeaconApiKeys.tsx` → `/v1/api-tokens` | [x] | frontend |
 | [[BCN-163]] | Wiring `BeaconLgpd.tsx` → `/v1/audit/lgpd/dsar` | [ ] | frontend |
-| [[BCN-164]] | Wiring `BeaconBilling.tsx` → `/v1/billing/*` | [ ] | frontend |
+| [[BCN-164]] | Wiring `BeaconBilling.tsx` → `/v1/billing/*` | [x] | frontend |
 | [[BCN-165]] | Wiring `BeaconChain.tsx` (visualização audit chain BLAKE3) | [ ] | frontend |
 | [[BCN-166]] | Wiring `BeaconDeliverability.tsx` (Postal reputation) | [ ] | frontend |
 | [[BCN-167]] | Wiring `BeaconAntispam.tsx` (ML score per tenant) | [ ] | frontend |
