@@ -1,0 +1,41 @@
+# BEACON OpenAPI spec — generated dump placeholder.
+#
+# Regenerate locally:
+#   cd apps/control-plane && python ../../scripts/dump_openapi.py > ../../docs/api/openapi.yaml
+#
+# CI step (BCN-227): `python scripts/dump_openapi.py | diff - docs/api/openapi.yaml`
+# (exits non-zero if drift detected).
+#
+# The full spec contains all endpoints registered in src/beacon/api/__init__.py:
+# - /healthz, /ready, /metrics
+# - /v1/messages/{email,sms,push,whatsapp}
+# - /v1/domains, /v1/domains/{id}/verify
+# - /v1/suppression
+# - /v1/api-tokens
+# - /v1/analytics/messages, /v1/analytics/messages/{id}/events
+# - /v1/journeys, /v1/journeys/{id}/{pause,resume}
+# - /v1/push-apps
+# - /v1/webpush/{vapid-public-key,subscriptions,sw.js}
+# - /v1/audit/lgpd/{dsar,breach-notify}
+# - /v1/antispam/{score,whitelist}
+# - /v1/billing/{usage-mtd,invoices,pricing}
+# - /v1/webhooks/inbound/{postal,zenvia,totalvoice}
+# - /v1/u/{token} (public unsubscribe portal)
+#
+# Schemas mirror Pydantic models in src/beacon/api/*.py.
+openapi: "3.0.2"
+info:
+  title: rewire-beacon
+  version: "0.3.0"
+  description: |
+    BEACON - Notification platform multi-canal BR.
+
+    Channels: email (Postal+SES), SMS (Zenvia+TotalVoice),
+    push (APNs/FCM/VAPID), WhatsApp (via CONNECT).
+
+    Auth: Bearer JWT (UI via Authentik) OR Bearer API token (bcn_live_...).
+    Multi-tenant: X-Organization-Id header.
+    Idempotent writes: Idempotency-Key header (24h TTL Redis).
+servers:
+  - url: https://api.beacon.rewirelabs.dev
+paths: {}  # generated at runtime

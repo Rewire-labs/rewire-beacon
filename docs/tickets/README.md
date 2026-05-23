@@ -216,24 +216,24 @@ endpoint estiver pronto.
 
 | ID | Título | Status | Owner |
 |---|---|---|---|
-| [[BCN-200]] | Coverage 70%+ control plane Python | [ ] | qa |
-| [[BCN-201]] | Smoke E2E: criar org → token → send email → check delivery → verify chain | [ ] | qa |
-| [[BCN-202]] | Load test 1000 RPS endpoint `/v1/messages/email` (locust) | [ ] | qa |
+| [[BCN-200]] | Coverage 70%+ control plane Python | [x] | qa |
+| [[BCN-201]] | Smoke E2E: criar org → token → send email → check delivery → verify chain | [x] | qa |
+| [[BCN-202]] | Load test 1000 RPS endpoint `/v1/messages/email` (locust) | [x] | qa |
 | [[BCN-203]] | Deliverability test: enviar para Mail Tester + verificar score >9/10 | [ ] | qa |
-| [[BCN-204]] | RLS isolation tests cross-tenant | [ ] | qa |
+| [[BCN-204]] | RLS isolation tests cross-tenant | [x] | qa |
 
 ## Phase 16 — Documentação
 
 | ID | Título | Status | Owner |
 |---|---|---|---|
-| [[BCN-220]] | `docs/00-overview.md` (similar Admin/App pattern) | [ ] | docs |
-| [[BCN-221]] | `docs/02-architecture.md` diagrama camadas | [ ] | docs |
-| [[BCN-222]] | `docs/runbooks/email-ip-warmup.md` | [ ] | docs |
-| [[BCN-223]] | `docs/runbooks/postal-incident.md` | [ ] | docs |
-| [[BCN-224]] | `docs/runbooks/anti-spam-false-positive.md` | [ ] | docs |
-| [[BCN-225]] | `docs/runbooks/dsar-export-deadline.md` (LGPD 15d) | [ ] | docs |
-| [[BCN-226]] | `docs/cluster-integration/` (5 docs equivalentes outros services) | [ ] | docs |
-| [[BCN-227]] | OpenAPI spec dump em `docs/api/openapi.yaml` + CI check | [ ] | backend |
+| [[BCN-220]] | `docs/00-overview.md` (similar Admin/App pattern) | [x] | docs |
+| [[BCN-221]] | `docs/02-architecture.md` diagrama camadas | [x] | docs |
+| [[BCN-222]] | `docs/runbooks/email-ip-warmup.md` | [x] | docs |
+| [[BCN-223]] | `docs/runbooks/postal-incident.md` | [x] | docs |
+| [[BCN-224]] | `docs/runbooks/anti-spam-false-positive.md` | [x] | docs |
+| [[BCN-225]] | `docs/runbooks/dsar-export-deadline.md` (LGPD 15d) | [x] | docs |
+| [[BCN-226]] | `docs/cluster-integration/` (5 docs equivalentes outros services) | [x] | docs |
+| [[BCN-227]] | OpenAPI spec dump em `docs/api/openapi.yaml` + CI check | [x] | backend |
 
 ## Convenções
 
