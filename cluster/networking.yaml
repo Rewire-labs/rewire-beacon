@@ -1,0 +1,126 @@
+# Kong routes + NetworkPolicies for BEACON.
+---
+apiVersion: configuration.konghq.com/v1
+kind: KongIngress
+metadata:
+  name: beacon-api-ingress
+  namespace: beacon
+upstream:
+  algorithm: round-robin
+proxy:
+  connect_timeout: 10000
+  read_timeout: 60000
+  write_timeout: 60000
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: beacon-api
+  namespace: beacon
+  annotations:
+    konghq.com/strip-path: "false"
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: kong
+  tls:
+    - hosts: [api.beacon.rewirelabs.dev]
+      secretName: beacon-api-tls
+  rules:
+    - host: api.beacon.rewirelabs.dev
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: beacon-control-plane
+                port: { number: 8080 }
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: beacon-ui
+  namespace: beacon
+  annotations:
+    konghq.com/strip-path: "false"
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: kong
+  tls:
+    - hosts: [app.beacon.rewirelabs.dev]
+      secretName: beacon-ui-tls
+  rules:
+    - host: app.beacon.rewirelabs.dev
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: beacon-ui
+                port: { number: 80 }
+---
+# NetworkPolicies — default-deny + explicit allows for cross-product (per ADR 0005).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: beacon
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-kong-ingress
+  namespace: beacon
+spec:
+  podSelector:
+    matchLabels: { app.kubernetes.io/name: beacon-control-plane }
+  ingress:
+    - from:
+        - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: kong } }
+      ports: [{ port: 8080 }]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-cross-product-internal
+  namespace: beacon
+spec:
+  podSelector:
+    matchLabels: { app.kubernetes.io/name: beacon-control-plane }
+  ingress:
+    - from:
+        - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: connect } }
+        - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: foundry } }
+        - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: host } }
+        - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: audit-trail } }
+        - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: guardian } }
+      ports: [{ port: 8080 }]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-egress-cluster-services
+  namespace: beacon
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: postgres-system } }
+        - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: redis } }
+        - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: redpanda } }
+        - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: clickhouse } }
+        - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: temporal } }
+        - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: vault } }
+        - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: minio } }
+    - to:
+        - podSelector: {}
+          namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: kube-system } }
+      ports: [{ port: 53 }, { port: 53, protocol: UDP }]
+    # External: SMTP relay, Asaas, NFe.io, Zenvia, TotalVoice, AWS SES, APNs, FCM
+    - to: [{ ipBlock: { cidr: 0.0.0.0/0, except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16] } }]
+      ports: [{ port: 443 }, { port: 25 }, { port: 587 }, { port: 2525 }]

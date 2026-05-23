@@ -204,13 +204,13 @@ endpoint estiver pronto.
 
 | ID | Título | Status | Owner |
 |---|---|---|---|
-| [[BCN-180]] | ExternalSecret CRDs `secret/rewire/beacon/*` (Vault paths) | [ ] | infra |
-| [[BCN-181]] | Authentik OIDC client `beacon-ui` configurado | [ ] | infra |
-| [[BCN-182]] | Kong route `app.beacon.rewirelabs.dev` + `api.beacon.rewirelabs.dev` | [ ] | infra |
-| [[BCN-183]] | ServiceMonitor + OTLP exportar para PULSE-CLOUD | [ ] | infra |
-| [[BCN-184]] | NetworkPolicies ingress permitido cross-product ver [[ADR-0005]] | [ ] | infra |
-| [[BCN-185]] | MinIO buckets `beacon-evidence` + `beacon-templates-assets` | [ ] | infra |
-| [[BCN-186]] | Backup Postgres `beacon` schema + ClickHouse retention | [ ] | infra |
+| [[BCN-180]] | ExternalSecret CRDs `secret/rewire/beacon/*` (Vault paths) | [x] | infra |
+| [[BCN-181]] | Authentik OIDC client `beacon-ui` configurado | [x] | infra |
+| [[BCN-182]] | Kong route `app.beacon.rewirelabs.dev` + `api.beacon.rewirelabs.dev` | [x] | infra |
+| [[BCN-183]] | ServiceMonitor + OTLP exportar para PULSE-CLOUD | [x] | infra |
+| [[BCN-184]] | NetworkPolicies ingress permitido cross-product ver [[ADR-0005]] | [x] | infra |
+| [[BCN-185]] | MinIO buckets `beacon-evidence` + `beacon-templates-assets` | [x] | infra |
+| [[BCN-186]] | Backup Postgres `beacon` schema + ClickHouse retention | [x] | infra |
 
 ## Phase 15 — Tests + smoke
 

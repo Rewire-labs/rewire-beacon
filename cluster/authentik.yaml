@@ -1,0 +1,29 @@
+# Authentik OIDC client provisioning for `beacon-ui`.
+# Apply via Authentik blueprint operator (akadmin).
+---
+apiVersion: ak.goauthentik.io/v1
+kind: AuthentikBlueprint
+metadata:
+  name: beacon-oidc-client
+  namespace: authentik
+spec:
+  entries:
+    - model: authentik_providers_oauth2.oauth2provider
+      identifiers: { name: beacon }
+      attrs:
+        client_type: confidential
+        client_id: beacon
+        client_secret: !KeyOf vault:secret/rewire/beacon/oidc#client_secret
+        authorization_flow: !Find [authentik_flows.flow, [slug, default-provider-authorization-explicit-consent]]
+        redirect_uris: |-
+          https://app.beacon.rewirelabs.dev/auth/callback
+          http://localhost:5173/auth/callback
+        scopes_allowed: [openid, email, profile, beacon-admin]
+        issuer_mode: per_provider
+    - model: authentik_core.application
+      identifiers: { slug: beacon }
+      attrs:
+        name: BEACON
+        provider: !Find [authentik_providers_oauth2.oauth2provider, [name, beacon]]
+        meta_launch_url: https://app.beacon.rewirelabs.dev
+        meta_icon: https://app.beacon.rewirelabs.dev/icon.svg

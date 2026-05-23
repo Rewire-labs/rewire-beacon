@@ -1,0 +1,53 @@
+# MinIO buckets + Postgres backup CronJob + ClickHouse retention config.
+---
+# MinIO Bucket CRs (provided by MinIO Operator).
+apiVersion: minio.min.io/v2
+kind: Tenant
+metadata:
+  name: beacon-storage-binding
+  namespace: minio
+spec:
+  buckets:
+    - name: beacon-evidence
+      objectLock: true
+      versioning:
+        enabled: true
+    - name: beacon-templates-assets
+      versioning:
+        enabled: true
+---
+# Postgres backup CronJob (uses pgBackRest sidecar in CNPG cluster).
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: beacon-backup-trigger
+  namespace: beacon
+spec:
+  schedule: "0 3 * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: trigger
+              image: bitnami/kubectl:1.30
+              command:
+                - sh
+                - -c
+                - |
+                  kubectl -n postgres-system annotate cluster rewire-shared \
+                    cnpg.io/forceBackup=$(date +%s) --overwrite
+---
+# ClickHouse retention is in clickhouse_schema.sql (TTL clauses).
+# No CronJob needed — MergeTree TTL is enforced automatically by the engine.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: beacon-retention-readme
+  namespace: beacon
+data:
+  README: |
+    Postgres backup: daily 03:00 BRT, WAL continuous (CNPG).
+    Retention: 30d hot + 7y Glacier (per ADR 0002).
+    ClickHouse retention: TTL sent_at + INTERVAL 13 MONTH (per partition).

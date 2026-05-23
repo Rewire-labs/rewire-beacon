@@ -1,0 +1,41 @@
+# ServiceMonitor + PodMonitor + OTLP wire to PULSE-CLOUD per cluster ADR.
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: beacon-control-plane
+  namespace: beacon
+  labels:
+    release: kube-prometheus-stack
+spec:
+  selector:
+    matchLabels: { app.kubernetes.io/name: beacon-control-plane }
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: beacon-workers
+  namespace: beacon
+spec:
+  selector:
+    matchLabels: { app.kubernetes.io/component: worker }
+  podMetricsEndpoints:
+    - port: metrics
+      path: /metrics
+      interval: 30s
+---
+# OTLP exporter ConfigMap consumed by Deployment.envFrom
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: beacon-otel-config
+  namespace: beacon
+data:
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector.pulse-cloud.svc:4317"
+  OTEL_SERVICE_NAME: "rewire-beacon"
+  OTEL_RESOURCE_ATTRIBUTES: "service.namespace=beacon,deployment.environment=prod"
