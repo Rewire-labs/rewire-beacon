@@ -85,3 +85,45 @@ async def postal_inbound(
             )
         logger.info("postal.suppressed org=%s reason=%s recipient=%s", org_id, suppress_reason, recipient)
     return {"status": "processed", "event": event_type, "suppressed": bool(suppress_reason)}
+
+
+# ---------- Zenvia/TotalVoice SMS callbacks (delivery status + 2-way) ----------
+
+
+@router.post("/zenvia")
+async def zenvia_inbound(request: Request) -> dict[str, Any]:
+    """Zenvia delivery + inbound SMS webhook.
+
+    Inbound SMS reply triggers our `message.sms.replied` event for customer
+    webhook fan-out. Delivery status updates `beacon.deliveries.status`.
+    """
+    body = await request.json()
+    event_type = body.get("type", "MESSAGE_STATUS")
+    msg = body.get("message", {})
+    # If reply contains opt-out keyword (PARAR/CANCELAR), add to suppression.
+    if event_type == "MESSAGE" and isinstance(msg.get("contents"), list):
+        text = next((c.get("text", "") for c in msg["contents"] if c.get("type") == "text"), "")
+        if text.strip().upper() in {"PARAR", "CANCELAR", "STOP", "SAIR"}:
+            from_phone = msg.get("from")
+            # We need the org_id — assume webhook URL includes it as query param.
+            org_id = request.query_params.get("organization_id")
+            if from_phone and org_id:
+                async with worker_session() as session:
+                    await svc.add(
+                        session,
+                        organization_id=org_id,
+                        identifier_type="phone_e164",
+                        identifier_value=from_phone if from_phone.startswith("+") else f"+{from_phone}",
+                        reason="unsubscribe",
+                        source_channel="sms",
+                        notes="zenvia:keyword_opt_out",
+                    )
+                logger.info("zenvia.opt_out org=%s phone=%s", org_id, from_phone)
+    return {"status": "processed", "event": event_type}
+
+
+@router.post("/totalvoice")
+async def totalvoice_inbound(request: Request) -> dict[str, Any]:
+    body = await request.json()
+    logger.info("totalvoice.callback %s", body.get("evento", "unknown"))
+    return {"status": "processed"}

@@ -242,3 +242,268 @@ async def _safe_publish(topic: str, key: str, value: dict[str, Any]) -> None:
         await _publish_kafka(topic, key, value)
     except Exception as exc:  # noqa: BLE001
         logger.warning("kafka_publish_failed topic=%s key=%s err=%s", topic, key, exc)
+
+
+# ============================================================ SMS hot path
+
+
+@dataclasses.dataclass(slots=True)
+class SmsMessageRequest:
+    to: str  # E.164 e.g. +5511999990001
+    text: str
+    from_number: str | None = None
+    template_slug: str | None = None
+    consent_basis: str | None = None
+    metadata: dict[str, Any] | None = None
+
+
+async def enqueue_sms(
+    session: AsyncSession,
+    *,
+    organization_id: str,
+    req: SmsMessageRequest,
+) -> EnqueuedMessage:
+    # Suppression.
+    stmt = select(SuppressionEntry.id).where(
+        SuppressionEntry.organization_id == organization_id,
+        SuppressionEntry.identifier_type == "phone_e164",
+        SuppressionEntry.identifier_value == req.to,
+    )
+    if (await session.execute(stmt)).first():
+        raise SuppressedError(f"recipient suppressed: {req.to}")
+
+    org = await session.get(Organization, organization_id)
+    if org is None:
+        raise InvalidSenderError(f"organization not found: {organization_id}")
+    if org.monthly_quota_sms <= 0:
+        raise QuotaExceededError("monthly sms quota exhausted")
+    tier = org.tier
+
+    now = datetime.now(UTC)
+    chain_hash = compute_chain_hash(
+        organization_id=organization_id,
+        recipient=req.to,
+        channel="sms",
+        content=req.text,
+        timestamp=now,
+        consent_basis=req.consent_basis,
+    )
+
+    message_id = new_ulid()
+    notif = Notification(
+        id=message_id,
+        tenant_id=organization_id,
+        channel_kind="sms",
+        recipient=req.to,
+        payload={"text": req.text, "from_number": req.from_number, "metadata": req.metadata or {}},
+        consent_basis=req.consent_basis,
+        audit_chain_hash=chain_hash,
+        created_at=now,
+    )
+    delivery = Delivery(
+        notification_id=message_id, provider="zenvia", status="pending",
+        attempts=0, created_at=now,
+    )
+    session.add(notif)
+    session.add(delivery)
+    await session.flush()
+    await session.commit()
+
+    envelope = {
+        "message_id": message_id,
+        "organization_id": organization_id,
+        "to": req.to,
+        "text": req.text,
+        "from_number": req.from_number,
+        "chain_hash": chain_hash,
+        "enqueued_at": now.isoformat(),
+    }
+    asyncio.create_task(_safe_publish(f"beacon.send.sms.{tier}", message_id, envelope))
+    asyncio.create_task(
+        anchor_to_citadel(
+            hash_hex=chain_hash,
+            metadata={
+                "message_id": message_id, "organization_id": organization_id,
+                "channel": "sms", "recipient": req.to, "timestamp": now.isoformat(),
+            },
+        )
+    )
+    return EnqueuedMessage(
+        message_id=message_id, status="queued", chain_hash=chain_hash, provider_route="zenvia"
+    )
+
+
+# ============================================================ Push hot path
+
+
+@dataclasses.dataclass(slots=True)
+class PushMessageRequest:
+    device_token: str
+    title: str
+    body: str
+    platform: str  # ios|android|web
+    data: dict[str, Any] | None = None
+    consent_basis: str | None = None
+    push_app_id: str | None = None
+
+
+async def enqueue_push(
+    session: AsyncSession,
+    *,
+    organization_id: str,
+    req: PushMessageRequest,
+) -> EnqueuedMessage:
+    stmt = select(SuppressionEntry.id).where(
+        SuppressionEntry.organization_id == organization_id,
+        SuppressionEntry.identifier_type == "push_token",
+        SuppressionEntry.identifier_value == req.device_token,
+    )
+    if (await session.execute(stmt)).first():
+        raise SuppressedError(f"recipient suppressed: {req.device_token[:8]}...")
+
+    org = await session.get(Organization, organization_id)
+    if org is None:
+        raise InvalidSenderError(f"organization not found: {organization_id}")
+    if org.monthly_quota_push <= 0:
+        raise QuotaExceededError("monthly push quota exhausted")
+    tier = org.tier
+
+    now = datetime.now(UTC)
+    content = f"{req.title}\n{req.body}"
+    chain_hash = compute_chain_hash(
+        organization_id=organization_id,
+        recipient=req.device_token,
+        channel=f"push_{req.platform}",
+        content=content,
+        timestamp=now,
+        consent_basis=req.consent_basis,
+    )
+    message_id = new_ulid()
+    notif = Notification(
+        id=message_id,
+        tenant_id=organization_id,
+        channel_kind=f"push_{req.platform}",
+        recipient=req.device_token,
+        payload={
+            "title": req.title, "body": req.body, "data": req.data or {},
+            "push_app_id": req.push_app_id, "platform": req.platform,
+        },
+        consent_basis=req.consent_basis,
+        audit_chain_hash=chain_hash,
+        created_at=now,
+    )
+    provider_default = {"ios": "apns", "android": "fcm", "web": "webpush"}[req.platform]
+    delivery = Delivery(
+        notification_id=message_id, provider=provider_default, status="pending",
+        attempts=0, created_at=now,
+    )
+    session.add(notif)
+    session.add(delivery)
+    await session.flush()
+    await session.commit()
+
+    envelope = {
+        "message_id": message_id, "organization_id": organization_id,
+        "device_token": req.device_token, "title": req.title, "body": req.body,
+        "data": req.data or {}, "push_app_id": req.push_app_id,
+        "platform": req.platform, "chain_hash": chain_hash,
+    }
+    topic = f"beacon.send.push.{req.platform}.{tier}"
+    asyncio.create_task(_safe_publish(topic, message_id, envelope))
+    asyncio.create_task(
+        anchor_to_citadel(
+            hash_hex=chain_hash,
+            metadata={
+                "message_id": message_id, "organization_id": organization_id,
+                "channel": f"push_{req.platform}", "timestamp": now.isoformat(),
+            },
+        )
+    )
+    return EnqueuedMessage(
+        message_id=message_id, status="queued", chain_hash=chain_hash, provider_route=provider_default
+    )
+
+
+# ============================================================ WhatsApp hot path (via CONNECT)
+
+
+@dataclasses.dataclass(slots=True)
+class WhatsAppMessageRequest:
+    to: str  # E.164
+    template_name: str
+    template_vars: dict[str, Any] | None = None
+    body_text: str | None = None  # for session messages within 24h window
+    consent_basis: str | None = None
+
+
+async def enqueue_whatsapp(
+    session: AsyncSession,
+    *,
+    organization_id: str,
+    req: WhatsAppMessageRequest,
+) -> EnqueuedMessage:
+    stmt = select(SuppressionEntry.id).where(
+        SuppressionEntry.organization_id == organization_id,
+        SuppressionEntry.identifier_type == "phone_e164",
+        SuppressionEntry.identifier_value == req.to,
+    )
+    if (await session.execute(stmt)).first():
+        raise SuppressedError(f"recipient suppressed: {req.to}")
+
+    org = await session.get(Organization, organization_id)
+    if org is None:
+        raise InvalidSenderError(f"organization not found: {organization_id}")
+    if org.monthly_quota_whatsapp <= 0:
+        raise QuotaExceededError("monthly whatsapp quota exhausted")
+    tier = org.tier
+
+    now = datetime.now(UTC)
+    content = req.body_text or f"template:{req.template_name}"
+    chain_hash = compute_chain_hash(
+        organization_id=organization_id,
+        recipient=req.to,
+        channel="whatsapp",
+        content=content,
+        timestamp=now,
+        consent_basis=req.consent_basis,
+    )
+    message_id = new_ulid()
+    notif = Notification(
+        id=message_id, tenant_id=organization_id, channel_kind="whatsapp",
+        recipient=req.to,
+        payload={
+            "template_name": req.template_name,
+            "template_vars": req.template_vars or {},
+            "body_text": req.body_text,
+        },
+        consent_basis=req.consent_basis,
+        audit_chain_hash=chain_hash, created_at=now,
+    )
+    delivery = Delivery(
+        notification_id=message_id, provider="connect", status="pending",
+        attempts=0, created_at=now,
+    )
+    session.add(notif)
+    session.add(delivery)
+    await session.flush()
+    await session.commit()
+
+    envelope = {
+        "message_id": message_id, "organization_id": organization_id,
+        "to": req.to, "template_name": req.template_name,
+        "template_vars": req.template_vars or {}, "body_text": req.body_text,
+        "chain_hash": chain_hash,
+    }
+    asyncio.create_task(_safe_publish(f"beacon.send.whatsapp.{tier}", message_id, envelope))
+    asyncio.create_task(
+        anchor_to_citadel(
+            hash_hex=chain_hash,
+            metadata={
+                "message_id": message_id, "organization_id": organization_id,
+                "channel": "whatsapp", "recipient": req.to, "timestamp": now.isoformat(),
+            },
+        )
+    )
+    return EnqueuedMessage(
+        message_id=message_id, status="queued", chain_hash=chain_hash, provider_route="connect"
+    )

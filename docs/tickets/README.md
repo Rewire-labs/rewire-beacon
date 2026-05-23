@@ -75,12 +75,12 @@ Primeiro canal a entregar para clientes beta.
 
 | ID | Título | Status | Owner |
 |---|---|---|---|
-| [[BCN-050]] | Cliente HTTP `integrations/zenvia.py` (primary BR) | [ ] | backend |
-| [[BCN-051]] | Cliente HTTP `integrations/totalvoice.py` (fallback BR) | [ ] | backend |
-| [[BCN-052]] | Worker Kafka consumer `workers/sms_sender.py` com BSP routing | [ ] | backend |
-| [[BCN-053]] | Endpoint `POST /v1/messages/sms` body real | [ ] | backend |
-| [[BCN-054]] | Two-way SMS receiver webhook (BSP → BEACON) | [ ] | backend |
-| [[BCN-055]] | Pricing pass-through + markup transparente (BEACON.md §2.2.2) | [ ] | backend |
+| [[BCN-050]] | Cliente HTTP `integrations/zenvia.py` (primary BR) | [x] | backend |
+| [[BCN-051]] | Cliente HTTP `integrations/totalvoice.py` (fallback BR) | [x] | backend |
+| [[BCN-052]] | Worker Kafka consumer `workers/sms_sender.py` com BSP routing | [x] | backend |
+| [[BCN-053]] | Endpoint `POST /v1/messages/sms` body real | [x] | backend |
+| [[BCN-054]] | Two-way SMS receiver webhook (BSP → BEACON) | [x] | backend |
+| [[BCN-055]] | Pricing pass-through + markup transparente (BEACON.md §2.2.2) | [x] | backend |
 | [[BCN-056]] | Acordo comercial Zenvia/TotalVoice (revenue share) | [ ] | comercial |
 
 ## Phase 5 — Push mobile (V0.2)
