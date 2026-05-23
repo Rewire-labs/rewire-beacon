@@ -8,6 +8,7 @@ from beacon.api import (
     analytics,
     antispam,
     api_tokens,
+    billing,
     deliveries,
     domains,
     journeys,
@@ -40,5 +41,6 @@ router.include_router(analytics.router)
 router.include_router(journeys.router)
 router.include_router(antispam.router)
 router.include_router(lgpd.router)
+router.include_router(billing.router)
 
 __all__ = ["router"]

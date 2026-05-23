@@ -165,12 +165,12 @@ Primeiro canal a entregar para clientes beta.
 
 | ID | Título | Status | Owner |
 |---|---|---|---|
-| [[BCN-130]] | Cliente HTTP `integrations/lago.py` | [ ] | backend |
-| [[BCN-131]] | Lago billable_metrics: emails_count, sms_count, push_count, wa_count, dedicated_ip_count | [ ] | backend |
-| [[BCN-132]] | Worker `tasks/usage_reporter.py` (5min cron) reporta consumo | [ ] | backend |
-| [[BCN-133]] | NFe.io integration para faturamento BR | [ ] | backend |
-| [[BCN-134]] | Asaas BR payment integration | [ ] | backend |
-| [[BCN-135]] | Endpoint `GET /v1/billing/usage-mtd` + `GET /v1/billing/invoices` | [ ] | backend |
+| [[BCN-130]] | Cliente HTTP `integrations/lago.py` | [x] | backend |
+| [[BCN-131]] | Lago billable_metrics: emails_count, sms_count, push_count, wa_count, dedicated_ip_count | [x] | backend |
+| [[BCN-132]] | Worker `tasks/usage_reporter.py` (5min cron) reporta consumo | [x] | backend |
+| [[BCN-133]] | NFe.io integration para faturamento BR | [x] | backend |
+| [[BCN-134]] | Asaas BR payment integration | [x] | backend |
+| [[BCN-135]] | Endpoint `GET /v1/billing/usage-mtd` + `GET /v1/billing/invoices` | [x] | backend |
 | [[BCN-136]] | UI BeaconBilling.tsx wiring backend | [ ] | frontend |
 
 ## Phase 13 — Frontend wiring (consumir API real)
