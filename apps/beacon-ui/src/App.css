@@ -1,0 +1,4 @@
+/* BEACON UI — global app-level styles (most styling lives in Tailwind). */
+#root {
+  min-height: 100vh;
+}
