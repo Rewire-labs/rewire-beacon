@@ -41,7 +41,7 @@ Construir foundation production-ready para suportar fluxos reais.
 | [[BCN-015]] | Middleware idempotency.py (Redis SHA256 24h TTL) | [x] | backend |
 | [[BCN-016]] | Service `services/api_tokens.py` (criação + bcrypt + revogação) | [x] | backend |
 | [[BCN-017]] | Endpoint `POST/GET/DELETE /v1/api-tokens` ver [[ADR-0003]] | [x] | backend |
-| [[BCN-018]] | Tests RLS isolation cross-tenant em 10+ tabelas | [ ] | qa |
+| [[BCN-018]] | Tests RLS isolation cross-tenant em 10+ tabelas | [x] | qa |
 
 ## Phase 2 — Email channel (V0.1 — Postal primary + AWS SES fallback)
 
