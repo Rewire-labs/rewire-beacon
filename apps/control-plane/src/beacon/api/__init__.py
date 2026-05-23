@@ -16,6 +16,7 @@ from beacon.api import (
     unsubscribe,
     webhooks,
     webhooks_inbound,
+    webpush_subs,
 )
 
 router = APIRouter()
@@ -30,5 +31,6 @@ router.include_router(suppression.router)
 router.include_router(unsubscribe.router)
 router.include_router(webhooks_inbound.router)
 router.include_router(push_apps.router)
+router.include_router(webpush_subs.router)
 
 __all__ = ["router"]

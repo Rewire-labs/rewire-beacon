@@ -99,11 +99,11 @@ Primeiro canal a entregar para clientes beta.
 
 | ID | Título | Status | Owner |
 |---|---|---|---|
-| [[BCN-070]] | Cliente `integrations/webpush.py` (pywebpush lib) | [ ] | backend |
-| [[BCN-071]] | VAPID key management per org | [ ] | backend |
-| [[BCN-072]] | Service Worker JS snippet generator | [ ] | frontend |
-| [[BCN-073]] | Endpoint `POST /v1/messages/push` web channel | [ ] | backend |
-| [[BCN-074]] | Subscription management endpoints | [ ] | backend |
+| [[BCN-070]] | Cliente `integrations/webpush.py` (pywebpush lib) | [x] | backend |
+| [[BCN-071]] | VAPID key management per org | [x] | backend |
+| [[BCN-072]] | Service Worker JS snippet generator | [x] | frontend |
+| [[BCN-073]] | Endpoint `POST /v1/messages/push` web channel | [x] | backend |
+| [[BCN-074]] | Subscription management endpoints | [x] | backend |
 
 ## Phase 7 — WhatsApp (depende CONNECT GA Q3 2026)
 
