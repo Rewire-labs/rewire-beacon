@@ -53,7 +53,7 @@ Primeiro canal a entregar para clientes beta.
 | [[BCN-021]] | Cliente HTTP `integrations/postal.py` (send + bounce/complaint) | [x] | backend |
 | [[BCN-022]] | Cliente HTTP `integrations/aws_ses_br.py` (fallback Scale+) | [x] | backend |
 | [[BCN-023]] | Worker Kafka consumer `workers/email_sender.py` | [x] | backend |
-| [[BCN-024]] | Endpoint `POST /v1/messages/email` body real (substituir stub) ver [[ADR-0002]] | [ ] | backend |
+| [[BCN-024]] | Endpoint `POST /v1/messages/email` body real (substituir stub) ver [[ADR-0002]] | [x] | backend |
 | [[BCN-025]] | Email domain verification flow (DKIM/SPF/DMARC) | [ ] | backend |
 | [[BCN-026]] | Endpoint `POST /v1/domains` + `POST /v1/domains/{id}/verify` | [ ] | backend |
 | [[BCN-027]] | Postal vhost provisioning per org ver [[ADR-0004]] | [ ] | backend+infra |
