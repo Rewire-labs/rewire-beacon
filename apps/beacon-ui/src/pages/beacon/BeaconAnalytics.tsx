@@ -1,8 +1,14 @@
+import { useEffect, useState } from "react";
 import { PageHeader, PageContainer, Card, Table, Th, Td } from "@/components/beacon/ui";
 import { ANALYTICS_30D, CHANNEL_LABELS, type Channel } from "@/content/beacon-mock";
 import { Calendar, Download } from "lucide-react";
+import { analytics } from "@/lib/api";
 
 export default function BeaconAnalytics() {
+  const [live, setLive] = useState<Array<Record<string, unknown>>>([]);
+  useEffect(() => {
+    analytics.summary({}).then((r) => setLive(r.rows)).catch(() => setLive([]));
+  }, []);
   const totals = ANALYTICS_30D.by_channel.reduce(
     (a, c) => ({
       sent: a.sent + c.sent, delivered: a.delivered + c.delivered, opened: a.opened + c.opened,

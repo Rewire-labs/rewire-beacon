@@ -1,19 +1,52 @@
+import { useState } from "react";
 import { PageHeader, PageContainer, Card, Badge, Table, Th, Td, timeAgo, fmtDate } from "@/components/beacon/ui";
 import { DSAR_REQUESTS } from "@/content/beacon-mock";
 import { FileCheck, Plus, AlertCircle } from "lucide-react";
+import { lgpd } from "@/lib/api";
 
 const TYPE_LABEL = { access: "Acesso", deletion: "Exclusão", portability: "Portabilidade" };
 const STATUS_TONE = { received: "warn" as const, in_progress: "warn" as const, fulfilled: "ok" as const };
 
 export default function BeaconLgpd() {
   const pending = DSAR_REQUESTS.filter((d) => d.status !== "fulfilled").length;
+  const [creating, setCreating] = useState(false);
+  const [email, setEmail] = useState("");
+  const [result, setResult] = useState<string | null>(null);
+  async function handleSubmit() {
+    if (!email) return;
+    try {
+      const r = await lgpd.requestDsar({ subject_email: email });
+      setResult(`DSAR ${r.id} aceito (ETA ${r.eta_hours}h)`);
+      setEmail("");
+      setCreating(false);
+    } catch (e) {
+      setResult(`Erro: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
   return (
     <PageContainer>
       <PageHeader
         title="LGPD · DSAR"
-        subtitle="Direito do titular de dados (Art. 18). DSAR fulfillment automático: BEACON retorna todas as mensagens com identifier_value. Breach notification 3-day automatizada."
-        actions={<button className="flex items-center gap-1.5 text-sm font-semibold bg-accent text-white px-3 py-2 rounded-md hover:bg-accent/90"><Plus size={14} /> Registrar DSAR</button>}
+        subtitle="Direito do titular de dados (Art. 18). DSAR fulfillment automático."
+        actions={
+          <button onClick={() => setCreating(true)} className="flex items-center gap-1.5 text-sm font-semibold bg-accent text-white px-3 py-2 rounded-md hover:bg-accent/90">
+            <Plus size={14} /> Registrar DSAR
+          </button>
+        }
       />
+
+      {creating && (
+        <Card className="p-4 mb-4">
+          <h3 className="text-sm font-semibold mb-2">Nova solicitacao DSAR</h3>
+          <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="titular@example.com"
+            className="w-full text-sm border rounded-md px-3 py-1.5 mb-2 font-mono" />
+          <div className="flex gap-2">
+            <button onClick={handleSubmit} className="text-sm bg-accent text-white px-3 py-1.5 rounded-md">Submeter</button>
+            <button onClick={() => setCreating(false)} className="text-sm border px-3 py-1.5 rounded-md">Cancelar</button>
+          </div>
+        </Card>
+      )}
+      {result && <Card className="p-3 mb-4 text-xs">{result}</Card>}
 
       <div className="grid md:grid-cols-4 gap-3 mb-6">
         <Card className="p-4"><p className="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold">DSAR pendentes</p><p className="text-2xl font-bold mt-1">{pending}</p></Card>

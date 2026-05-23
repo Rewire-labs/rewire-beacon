@@ -1,10 +1,14 @@
+import { useEffect, useState } from "react";
 import { PageHeader, PageContainer, Card, Badge, Table, Th, Td } from "@/components/beacon/ui";
 import { PUSH_APPS } from "@/content/beacon-mock";
 import { Plus, Smartphone, Apple, Globe } from "lucide-react";
+import { pushApps } from "@/lib/api";
 
 const PLATFORM_ICON = { ios: Apple, android: Smartphone, web: Globe };
 
 export default function BeaconPushApps() {
+  const [live, setLive] = useState<Array<{ id: string; name: string; platform: string }>>([]);
+  useEffect(() => { pushApps.list().then(setLive).catch(() => setLive([])); }, []);
   return (
     <PageContainer>
       <PageHeader

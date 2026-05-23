@@ -1,8 +1,12 @@
+import { useEffect, useState } from "react";
 import { PageHeader, PageContainer, Card, Badge } from "@/components/beacon/ui";
 import { JOURNEYS } from "@/content/beacon-mock";
 import { Plus, Workflow, GitBranch, Play, Pause } from "lucide-react";
+import { journeys } from "@/lib/api";
 
 export default function BeaconJourneys() {
+  const [_live, setLive] = useState<Array<{ id: string; name: string; status: string }>>([]);
+  useEffect(() => { journeys.list().then(setLive).catch(() => setLive([])); }, []);
   return (
     <PageContainer>
       <PageHeader
