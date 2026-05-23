@@ -87,12 +87,12 @@ Primeiro canal a entregar para clientes beta.
 
 | ID | Título | Status | Owner |
 |---|---|---|---|
-| [[BCN-060]] | Cliente APNs `integrations/apns.py` (aioapns lib) | [ ] | backend |
-| [[BCN-061]] | Cliente FCM `integrations/fcm.py` (Google Cloud Python lib) | [ ] | backend |
-| [[BCN-062]] | Worker `workers/push_sender.py` (mobile fan-out) | [ ] | backend |
-| [[BCN-063]] | Endpoint `POST /v1/messages/push` body real | [ ] | backend |
-| [[BCN-064]] | Cert/key upload management (APNs .p8, FCM service-account JSON) | [ ] | backend |
-| [[BCN-065]] | Bad device token cleanup background job | [ ] | backend |
+| [[BCN-060]] | Cliente APNs `integrations/apns.py` (aioapns lib) | [x] | backend |
+| [[BCN-061]] | Cliente FCM `integrations/fcm.py` (Google Cloud Python lib) | [x] | backend |
+| [[BCN-062]] | Worker `workers/push_sender.py` (mobile fan-out) | [x] | backend |
+| [[BCN-063]] | Endpoint `POST /v1/messages/push` body real | [x] | backend |
+| [[BCN-064]] | Cert/key upload management (APNs .p8, FCM service-account JSON) | [x] | backend |
+| [[BCN-065]] | Bad device token cleanup background job | [x] | backend |
 | [[BCN-066]] | SDK iOS (Swift) + Android (Kotlin) — separate repos cluster ADR 0043 | [ ] | backend |
 
 ## Phase 6 — Push web (V0.3)
