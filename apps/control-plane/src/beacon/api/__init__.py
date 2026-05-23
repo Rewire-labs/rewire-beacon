@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from beacon.api import (
+    analytics,
     api_tokens,
     deliveries,
     domains,
@@ -32,5 +33,6 @@ router.include_router(unsubscribe.router)
 router.include_router(webhooks_inbound.router)
 router.include_router(push_apps.router)
 router.include_router(webpush_subs.router)
+router.include_router(analytics.router)
 
 __all__ = ["router"]

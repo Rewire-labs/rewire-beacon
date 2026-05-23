@@ -120,12 +120,12 @@ Primeiro canal a entregar para clientes beta.
 | ID | Título | Status | Owner |
 |---|---|---|---|
 | [[BCN-090]] | ClickHouse cluster provisioning Helm chart 3 nodes | [ ] | infra |
-| [[BCN-091]] | ClickHouse database `beacon_events` + tabelas + MV ver [[ADR-0002]] | [ ] | backend |
+| [[BCN-091]] | ClickHouse database `beacon_events` + tabelas + MV ver [[ADR-0002]] | [x] | backend |
 | [[BCN-092]] | Kafka topics `beacon.events.<channel>` via Strimzi CRDs | [ ] | infra |
-| [[BCN-093]] | ClickHouse Kafka engine table consumindo tópicos | [ ] | backend |
-| [[BCN-094]] | Endpoint `GET /v1/analytics/messages` query ClickHouse + cache Redis 5min | [ ] | backend |
-| [[BCN-095]] | Endpoint `GET /v1/messages/{id}/events` timeline | [ ] | backend |
-| [[BCN-096]] | Daily stats materialized view refresh | [ ] | backend |
+| [[BCN-093]] | ClickHouse Kafka engine table consumindo tópicos | [x] | backend |
+| [[BCN-094]] | Endpoint `GET /v1/analytics/messages` query ClickHouse + cache Redis 5min | [x] | backend |
+| [[BCN-095]] | Endpoint `GET /v1/messages/{id}/events` timeline | [x] | backend |
+| [[BCN-096]] | Daily stats materialized view refresh | [x] | backend |
 
 ## Phase 9 — Workflows Temporal (V0.3 — multi-channel journeys)
 
