@@ -9,6 +9,7 @@ from beacon.api import (
     api_tokens,
     deliveries,
     domains,
+    journeys,
     messages,
     notifications,
     push_apps,
@@ -34,5 +35,6 @@ router.include_router(webhooks_inbound.router)
 router.include_router(push_apps.router)
 router.include_router(webpush_subs.router)
 router.include_router(analytics.router)
+router.include_router(journeys.router)
 
 __all__ = ["router"]

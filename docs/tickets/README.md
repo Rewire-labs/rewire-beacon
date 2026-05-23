@@ -132,12 +132,12 @@ Primeiro canal a entregar para clientes beta.
 | ID | Título | Status | Owner |
 |---|---|---|---|
 | [[BCN-100]] | Temporal cluster setup compartilhado cluster Rewire | [ ] | infra |
-| [[BCN-101]] | Workflow `MultiChannelJourneyWorkflow` (BEACON.md §2.9) | [ ] | backend |
-| [[BCN-102]] | Activities: `send_message_<channel>`, `check_suppression`, etc | [ ] | backend |
-| [[BCN-103]] | Endpoint `POST /v1/journeys` + `/start` + `/pause` + `/resume` | [ ] | backend |
+| [[BCN-101]] | Workflow `MultiChannelJourneyWorkflow` (BEACON.md §2.9) | [x] | backend |
+| [[BCN-102]] | Activities: `send_message_<channel>`, `check_suppression`, etc | [x] | backend |
+| [[BCN-103]] | Endpoint `POST /v1/journeys` + `/start` + `/pause` + `/resume` | [x] | backend |
 | [[BCN-104]] | Visual flow builder UI BeaconJourneys.tsx (similar n8n) | [ ] | frontend |
-| [[BCN-105]] | Quiet hours respect timezone do recipient | [ ] | backend |
-| [[BCN-106]] | Frequency capping cross-canal | [ ] | backend |
+| [[BCN-105]] | Quiet hours respect timezone do recipient | [x] | backend |
+| [[BCN-106]] | Frequency capping cross-canal | [x] | backend |
 
 ## Phase 10 — Anti-spam ML (V0.4+)
 
