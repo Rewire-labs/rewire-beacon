@@ -64,12 +64,12 @@ Primeiro canal a entregar para clientes beta.
 
 | ID | Título | Status | Owner |
 |---|---|---|---|
-| [[BCN-035]] | Service `services/suppression.py` (add/remove/check) | [ ] | backend |
-| [[BCN-036]] | Cross-canal suppression check ANTES de cada envio (latência <2ms) | [ ] | backend |
-| [[BCN-037]] | Endpoint `POST/GET/DELETE /v1/suppression` | [ ] | backend |
-| [[BCN-038]] | Portal público `/u/{unsubscribe_token}` (LGPD Art. 18) | [ ] | backend+frontend |
-| [[BCN-039]] | Postal webhook handler `bounce`/`complaint` → auto-add suppression | [ ] | backend |
-| [[BCN-040]] | Tests bounce/complaint handling end-to-end | [ ] | qa |
+| [[BCN-035]] | Service `services/suppression.py` (add/remove/check) | [x] | backend |
+| [[BCN-036]] | Cross-canal suppression check ANTES de cada envio (latência <2ms) | [x] | backend |
+| [[BCN-037]] | Endpoint `POST/GET/DELETE /v1/suppression` | [x] | backend |
+| [[BCN-038]] | Portal público `/u/{unsubscribe_token}` (LGPD Art. 18) | [x] | backend+frontend |
+| [[BCN-039]] | Postal webhook handler `bounce`/`complaint` → auto-add suppression | [x] | backend |
+| [[BCN-040]] | Tests bounce/complaint handling end-to-end | [x] | qa |
 
 ## Phase 4 — SMS channel (V0.2)
 

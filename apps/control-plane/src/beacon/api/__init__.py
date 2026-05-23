@@ -4,7 +4,18 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from beacon.api import api_tokens, deliveries, domains, messages, notifications, templates, webhooks
+from beacon.api import (
+    api_tokens,
+    deliveries,
+    domains,
+    messages,
+    notifications,
+    suppression,
+    templates,
+    unsubscribe,
+    webhooks,
+    webhooks_inbound,
+)
 
 router = APIRouter()
 router.include_router(notifications.router, tags=["notifications"])
@@ -14,5 +25,8 @@ router.include_router(webhooks.router, tags=["webhooks"])
 router.include_router(api_tokens.router)
 router.include_router(messages.router)
 router.include_router(domains.router)
+router.include_router(suppression.router)
+router.include_router(unsubscribe.router)
+router.include_router(webhooks_inbound.router)
 
 __all__ = ["router"]
