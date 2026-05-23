@@ -39,8 +39,8 @@ Construir foundation production-ready para suportar fluxos reais.
 | [[BCN-013]] | Middleware auth.py JWT Authentik (UI) + API token (SDK) ver [[ADR-0003]] | [x] | backend |
 | [[BCN-014]] | Middleware tenancy.py SET GUC `beacon.current_org_id` | [x] | backend |
 | [[BCN-015]] | Middleware idempotency.py (Redis SHA256 24h TTL) | [x] | backend |
-| [[BCN-016]] | Service `services/api_tokens.py` (criação + bcrypt + revogação) | [ ] | backend |
-| [[BCN-017]] | Endpoint `POST/GET/DELETE /v1/api-tokens` ver [[ADR-0003]] | [ ] | backend |
+| [[BCN-016]] | Service `services/api_tokens.py` (criação + bcrypt + revogação) | [x] | backend |
+| [[BCN-017]] | Endpoint `POST/GET/DELETE /v1/api-tokens` ver [[ADR-0003]] | [x] | backend |
 | [[BCN-018]] | Tests RLS isolation cross-tenant em 10+ tabelas | [ ] | qa |
 
 ## Phase 2 — Email channel (V0.1 — Postal primary + AWS SES fallback)
