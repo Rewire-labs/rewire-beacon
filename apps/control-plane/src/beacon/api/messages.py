@@ -11,6 +11,7 @@ from pydantic import BaseModel, EmailStr, Field
 
 from beacon.db.session import tenant_scoped_session
 from beacon.services.messaging import (
+    BlockedBySpamError,
     EmailMessageRequest,
     InvalidSenderError,
     PushMessageRequest,
@@ -77,6 +78,8 @@ async def send_email(payload: EmailSendBody, request: Request) -> EmailSendRespo
         raise HTTPException(status_code=422, detail={"error": "invalid_sender", "message": str(exc)})
     except QuotaExceededError as exc:
         raise HTTPException(status_code=402, detail={"error": "quota_exceeded", "message": str(exc)})
+    except BlockedBySpamError as exc:
+        raise HTTPException(status_code=451, detail={"error": "blocked_antispam", "message": str(exc)})
     return EmailSendResponse(
         message_id=result.message_id,
         status=result.status,

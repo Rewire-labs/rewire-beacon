@@ -143,11 +143,11 @@ Primeiro canal a entregar para clientes beta.
 
 | ID | Título | Status | Owner |
 |---|---|---|---|
-| [[BCN-110]] | Service Python anti-spam ML (scikit-learn + sentence-transformers) | [ ] | backend |
-| [[BCN-111]] | Pattern detection: bulk new sender + suspect content | [ ] | backend |
-| [[BCN-112]] | Pre-send check integrated em hot path (latência <50ms) | [ ] | backend |
-| [[BCN-113]] | Customer success alert quando bloqueio preventivo | [ ] | backend |
-| [[BCN-114]] | Whitelist managed para falsos positivos | [ ] | backend |
+| [[BCN-110]] | Service Python anti-spam ML (scikit-learn + sentence-transformers) | [x] | backend |
+| [[BCN-111]] | Pattern detection: bulk new sender + suspect content | [x] | backend |
+| [[BCN-112]] | Pre-send check integrated em hot path (latência <50ms) | [x] | backend |
+| [[BCN-113]] | Customer success alert quando bloqueio preventivo | [x] | backend |
+| [[BCN-114]] | Whitelist managed para falsos positivos | [x] | backend |
 | [[BCN-115]] | Training data labeled (BEACON.md §2.13 CapEx Enterprise) | [ ] | data |
 
 ## Phase 11 — LGPD + Audit Chain (V0.2)

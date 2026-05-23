@@ -6,6 +6,7 @@ from fastapi import APIRouter
 
 from beacon.api import (
     analytics,
+    antispam,
     api_tokens,
     deliveries,
     domains,
@@ -36,5 +37,6 @@ router.include_router(push_apps.router)
 router.include_router(webpush_subs.router)
 router.include_router(analytics.router)
 router.include_router(journeys.router)
+router.include_router(antispam.router)
 
 __all__ = ["router"]

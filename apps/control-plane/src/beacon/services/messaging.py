@@ -33,6 +33,7 @@ from beacon.db.models import (
     Organization,
     SuppressionEntry,
 )
+from beacon.services.antispam import alert_customer_success, evaluate as antispam_evaluate
 from beacon.services.audit_chain import anchor_to_citadel, compute_chain_hash
 from beacon.settings import get_settings
 
@@ -84,6 +85,10 @@ class QuotaExceededError(Exception):
 
 class InvalidSenderError(Exception):
     pass
+
+
+class BlockedBySpamError(Exception):
+    """Raised when anti-spam ML blocks the message preventively."""
 
 
 async def _validate_sender(session: AsyncSession, org_id: str, sender_addr: str) -> EmailDomain:
@@ -156,6 +161,20 @@ async def enqueue_email(
         await _check_suppression(session, organization_id, recipient)
     # 3. Quota
     tier = await _check_quota(session, organization_id, "email")
+
+    # 3b. Anti-spam ML check
+    content_for_score = (req.html_body or "") + " " + (req.plain_body or "") + " " + req.subject
+    decision = await antispam_evaluate(
+        organization_id=organization_id, content=content_for_score, recipients_count=len(req.to),
+    )
+    if decision.decision == "block":
+        asyncio.create_task(
+            alert_customer_success(
+                organization_id=organization_id, decision=decision,
+                sample_content=content_for_score[:500],
+            )
+        )
+        raise BlockedBySpamError(f"blocked by antispam: score={decision.score} reasons={decision.reasons}")
 
     # 4. Chain hash
     now = datetime.now(UTC)
