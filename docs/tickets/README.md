@@ -36,9 +36,9 @@ Construir foundation production-ready para suportar fluxos reais.
 | [[BCN-010]] | Migration 0002 expandir schema para 10+ tabelas (senders, suppression, webhooks, providers) ver [[ADR-0002]] | [x] | backend |
 | [[BCN-011]] | Migration 0003 RLS FORCE + POLICY org_isolation em todas as tabelas multi-tenant ver [[ADR-0004]] | [x] | backend |
 | [[BCN-012]] | Migration 0004 role `beacon_worker` com BYPASSRLS | [x] | backend |
-| [[BCN-013]] | Middleware auth.py JWT Authentik (UI) + API token (SDK) ver [[ADR-0003]] | [ ] | backend |
-| [[BCN-014]] | Middleware tenancy.py SET GUC `beacon.current_org_id` | [ ] | backend |
-| [[BCN-015]] | Middleware idempotency.py (Redis SHA256 24h TTL) | [ ] | backend |
+| [[BCN-013]] | Middleware auth.py JWT Authentik (UI) + API token (SDK) ver [[ADR-0003]] | [x] | backend |
+| [[BCN-014]] | Middleware tenancy.py SET GUC `beacon.current_org_id` | [x] | backend |
+| [[BCN-015]] | Middleware idempotency.py (Redis SHA256 24h TTL) | [x] | backend |
 | [[BCN-016]] | Service `services/api_tokens.py` (criação + bcrypt + revogação) | [ ] | backend |
 | [[BCN-017]] | Endpoint `POST/GET/DELETE /v1/api-tokens` ver [[ADR-0003]] | [ ] | backend |
 | [[BCN-018]] | Tests RLS isolation cross-tenant em 10+ tabelas | [ ] | qa |

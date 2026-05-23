@@ -21,6 +21,7 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from beacon.api import router as api_router
+from beacon.middleware import AuthMiddleware, IdempotencyMiddleware, TenancyMiddleware
 from beacon.settings import get_settings
 
 logger = structlog.get_logger(__name__)
@@ -91,6 +92,12 @@ def create_app() -> FastAPI:
     @app.get("/metrics", include_in_schema=False)
     async def metrics() -> PlainTextResponse:
         return PlainTextResponse(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+    # Middleware order: outer-most added LAST. Wanted execution order on
+    # request: Auth -> Tenancy -> Idempotency -> handler.
+    app.add_middleware(IdempotencyMiddleware)
+    app.add_middleware(TenancyMiddleware)
+    app.add_middleware(AuthMiddleware)
 
     app.include_router(api_router, prefix="/v1")
     return app
