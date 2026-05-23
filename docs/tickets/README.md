@@ -154,12 +154,12 @@ Primeiro canal a entregar para clientes beta.
 
 | ID | Título | Status | Owner |
 |---|---|---|---|
-| [[BCN-120]] | BLAKE3 hash per message (content + recipient + timestamp + consent_basis) ver [[ADR-0005]] | [ ] | backend |
-| [[BCN-121]] | CITADEL chain anchor: POST `/chain/append` per message | [ ] | backend |
-| [[BCN-122]] | Endpoint `POST /v1/audit/lgpd/dsar` (Art. 18 export) | [ ] | backend |
-| [[BCN-123]] | Lawful basis tag obrigatório em send (consent/contract/legal/legitimate) | [ ] | backend |
-| [[BCN-124]] | Breach notification automático 3-day (LGPD ANPD) | [ ] | backend |
-| [[BCN-125]] | Cross-canal unsubscribe centralizado portal `/u/<token>` | [ ] | backend+frontend |
+| [[BCN-120]] | BLAKE3 hash per message (content + recipient + timestamp + consent_basis) ver [[ADR-0005]] | [x] | backend |
+| [[BCN-121]] | CITADEL chain anchor: POST `/chain/append` per message | [x] | backend |
+| [[BCN-122]] | Endpoint `POST /v1/audit/lgpd/dsar` (Art. 18 export) | [x] | backend |
+| [[BCN-123]] | Lawful basis tag obrigatório em send (consent/contract/legal/legitimate) | [x] | backend |
+| [[BCN-124]] | Breach notification automático 3-day (LGPD ANPD) | [x] | backend |
+| [[BCN-125]] | Cross-canal unsubscribe centralizado portal `/u/<token>` | [x] | backend+frontend |
 
 ## Phase 12 — Billing wire (V0.2)
 

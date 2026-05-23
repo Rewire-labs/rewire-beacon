@@ -11,6 +11,7 @@ from beacon.api import (
     deliveries,
     domains,
     journeys,
+    lgpd,
     messages,
     notifications,
     push_apps,
@@ -38,5 +39,6 @@ router.include_router(webpush_subs.router)
 router.include_router(analytics.router)
 router.include_router(journeys.router)
 router.include_router(antispam.router)
+router.include_router(lgpd.router)
 
 __all__ = ["router"]
