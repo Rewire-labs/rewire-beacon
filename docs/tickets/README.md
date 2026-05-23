@@ -33,7 +33,7 @@ Construir foundation production-ready para suportar fluxos reais.
 
 | ID | Título | Status | Owner |
 |---|---|---|---|
-| [[BCN-010]] | Migration 0002 expandir schema para 10+ tabelas (senders, suppression, webhooks, providers) ver [[ADR-0002]] | [ ] | backend |
+| [[BCN-010]] | Migration 0002 expandir schema para 10+ tabelas (senders, suppression, webhooks, providers) ver [[ADR-0002]] | [x] | backend |
 | [[BCN-011]] | Migration 0003 RLS FORCE + POLICY org_isolation em todas as tabelas multi-tenant ver [[ADR-0004]] | [ ] | backend |
 | [[BCN-012]] | Migration 0004 role `beacon_worker` com BYPASSRLS | [ ] | backend |
 | [[BCN-013]] | Middleware auth.py JWT Authentik (UI) + API token (SDK) ver [[ADR-0003]] | [ ] | backend |
