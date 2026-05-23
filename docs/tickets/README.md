@@ -109,10 +109,10 @@ Primeiro canal a entregar para clientes beta.
 
 | ID | Título | Status | Owner |
 |---|---|---|---|
-| [[BCN-080]] | Cliente HTTP `integrations/connect.py` ver [[ADR-0005]] | [ ] | backend |
-| [[BCN-081]] | Worker `workers/whatsapp_sender.py` delega CONNECT | [ ] | backend |
-| [[BCN-082]] | Endpoint `POST /v1/messages/whatsapp` body real | [ ] | backend |
-| [[BCN-083]] | Template sync background: CONNECT (approved Meta) → BEACON | [ ] | backend |
+| [[BCN-080]] | Cliente HTTP `integrations/connect.py` ver [[ADR-0005]] | [x] | backend |
+| [[BCN-081]] | Worker `workers/whatsapp_sender.py` delega CONNECT | [x] | backend |
+| [[BCN-082]] | Endpoint `POST /v1/messages/whatsapp` body real | [x] | backend |
+| [[BCN-083]] | Template sync background: CONNECT (approved Meta) → BEACON | [x] | backend |
 | [[BCN-084]] | Quality rating display em UI BeaconWhatsapp.tsx | [ ] | frontend |
 
 ## Phase 8 — Analytics ClickHouse (V0.2+)
