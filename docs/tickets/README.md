@@ -50,8 +50,8 @@ Primeiro canal a entregar para clientes beta.
 | ID | Título | Status | Owner |
 |---|---|---|---|
 | [[BCN-020]] | Postal infrastructure: helm chart 8 nodes + IP pool 60 IPs BR | [ ] | infra |
-| [[BCN-021]] | Cliente HTTP `integrations/postal.py` (send + bounce/complaint) | [ ] | backend |
-| [[BCN-022]] | Cliente HTTP `integrations/aws_ses_br.py` (fallback Scale+) | [ ] | backend |
+| [[BCN-021]] | Cliente HTTP `integrations/postal.py` (send + bounce/complaint) | [x] | backend |
+| [[BCN-022]] | Cliente HTTP `integrations/aws_ses_br.py` (fallback Scale+) | [x] | backend |
 | [[BCN-023]] | Worker Kafka consumer `workers/email_sender.py` | [ ] | backend |
 | [[BCN-024]] | Endpoint `POST /v1/messages/email` body real (substituir stub) ver [[ADR-0002]] | [ ] | backend |
 | [[BCN-025]] | Email domain verification flow (DKIM/SPF/DMARC) | [ ] | backend |
