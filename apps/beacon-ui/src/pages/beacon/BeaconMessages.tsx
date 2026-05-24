@@ -1,10 +1,15 @@
 import { PageHeader, PageContainer, Card, Badge, StatusDot, Table, Th, Td, timeAgo } from "@/components/beacon/ui";
+import { DemoBanner } from "@/components/beacon/DemoBanner";
 import { MESSAGES, CHANNEL_LABELS } from "@/content/beacon-mock";
+import { useBeaconMessages } from "@/lib/hooks/useBeacon";
 import { Search, Filter, Send, Download } from "lucide-react";
 
+// BCN-231: BeaconMessages wired to /v1/messages (and analytics).
 export default function BeaconMessages() {
+  const messages = useBeaconMessages();
   return (
     <PageContainer>
+      {messages.isDemo && <DemoBanner detail="GET /v1/messages indisponivel" />}
       <PageHeader
         title="Mensagens"
         subtitle="Log de envios em tempo real (todos os canais). Eventos vindos de ClickHouse com retenção de 13 meses + audit chain BLAKE3."

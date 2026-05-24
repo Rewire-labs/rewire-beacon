@@ -1,10 +1,15 @@
 import { PageHeader, PageContainer, Card, Badge, Table, Th, Td, timeAgo } from "@/components/beacon/ui";
+import { DemoBanner } from "@/components/beacon/DemoBanner";
 import { TEMPLATES, CHANNEL_LABELS } from "@/content/beacon-mock";
+import { useBeaconTemplates } from "@/lib/hooks/useBeacon";
 import { Plus, FileText } from "lucide-react";
 
+// BCN-232: BeaconTemplates wired to /v1/templates.
 export default function BeaconTemplates() {
+  const templates = useBeaconTemplates();
   return (
     <PageContainer>
+      {templates.isDemo && <DemoBanner detail="GET /v1/templates indisponivel" />}
       <PageHeader
         title="Templates"
         subtitle="MJML 5.x para email, Handlebars-like para variáveis, A/B testing nativo. 50+ templates marketplace prontos para e-commerce, fintech, healthtech."

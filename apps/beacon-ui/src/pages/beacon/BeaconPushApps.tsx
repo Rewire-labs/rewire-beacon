@@ -1,16 +1,17 @@
-import { useEffect, useState } from "react";
 import { PageHeader, PageContainer, Card, Badge, Table, Th, Td } from "@/components/beacon/ui";
+import { DemoBanner } from "@/components/beacon/DemoBanner";
 import { PUSH_APPS } from "@/content/beacon-mock";
+import { useBeaconPushApps } from "@/lib/hooks/useBeacon";
 import { Plus, Smartphone, Apple, Globe } from "lucide-react";
-import { pushApps } from "@/lib/api";
 
 const PLATFORM_ICON = { ios: Apple, android: Smartphone, web: Globe };
 
+// BCN-238: BeaconPushApps wired to /v1/push-apps via TanStack hook.
 export default function BeaconPushApps() {
-  const [live, setLive] = useState<Array<{ id: string; name: string; platform: string }>>([]);
-  useEffect(() => { pushApps.list().then(setLive).catch(() => setLive([])); }, []);
+  const pushQ = useBeaconPushApps();
   return (
     <PageContainer>
+      {pushQ.isDemo && <DemoBanner detail="GET /v1/push-apps indisponivel" />}
       <PageHeader
         title="Push apps"
         subtitle="APNs (iOS), FCM (Android) e VAPID Web Push (RFC 8030). Connection pooling + retry exponential + cleanup automático de bad tokens."

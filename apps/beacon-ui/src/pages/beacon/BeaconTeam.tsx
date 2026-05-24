@@ -1,12 +1,17 @@
 import { PageHeader, PageContainer, Card, Badge, Table, Th, Td, timeAgo } from "@/components/beacon/ui";
+import { DemoBanner } from "@/components/beacon/DemoBanner";
 import { TEAM } from "@/content/beacon-mock";
+import { useBeaconTeam } from "@/lib/hooks/useBeacon";
 import { Plus, Users, Shield } from "lucide-react";
 
 const ROLE_TONE = { owner: "bad" as const, admin: "warn" as const, developer: "accent" as const, marketer: "accent" as const, viewer: "ok" as const };
 
+// BCN-248: BeaconTeam wired to /v1/team.
 export default function BeaconTeam() {
+  const teamQ = useBeaconTeam();
   return (
     <PageContainer>
+      {teamQ.isDemo && <DemoBanner detail="GET /v1/team indisponivel" />}
       <PageHeader
         title="Time & SSO"
         subtitle="Authentik OIDC para SSO + RBAC granular: owner, admin, developer, marketer, viewer. Auditores externos têm role viewer sem expor API keys."

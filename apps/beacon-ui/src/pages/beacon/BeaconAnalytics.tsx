@@ -1,14 +1,12 @@
-import { useEffect, useState } from "react";
 import { PageHeader, PageContainer, Card, Table, Th, Td } from "@/components/beacon/ui";
+import { DemoBanner } from "@/components/beacon/DemoBanner";
 import { ANALYTICS_30D, CHANNEL_LABELS, type Channel } from "@/content/beacon-mock";
+import { useBeaconAnalytics } from "@/lib/hooks/useBeacon";
 import { Calendar, Download } from "lucide-react";
-import { analytics } from "@/lib/api";
 
+// BCN-240: BeaconAnalytics wired to /v1/analytics/messages via TanStack hook.
 export default function BeaconAnalytics() {
-  const [live, setLive] = useState<Array<Record<string, unknown>>>([]);
-  useEffect(() => {
-    analytics.summary({}).then((r) => setLive(r.rows)).catch(() => setLive([]));
-  }, []);
+  const analyticsQ = useBeaconAnalytics({});
   const totals = ANALYTICS_30D.by_channel.reduce(
     (a, c) => ({
       sent: a.sent + c.sent, delivered: a.delivered + c.delivered, opened: a.opened + c.opened,
@@ -21,6 +19,7 @@ export default function BeaconAnalytics() {
 
   return (
     <PageContainer>
+      {analyticsQ.isDemo && <DemoBanner detail="GET /v1/analytics/messages indisponivel" />}
       <PageHeader
         title="Analytics"
         subtitle="Eventos vindos do ClickHouse com retenção de 13 meses. Materialized views por org × dia × canal para dashboards <100ms."

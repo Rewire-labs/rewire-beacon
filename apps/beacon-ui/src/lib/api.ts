@@ -170,3 +170,79 @@ export const webpush = {
   subscribe: (sub: PushSubscriptionJSON) =>
     api("/webpush/subscriptions", { method: "POST", body: sub }),
 };
+
+// ----- Phase-13 UI wiring (BCN-230..248) extra surfaces -----------------
+// These mirror endpoints exposed by the FastAPI control plane. Pages fall
+// back to `@/content/beacon-mock` when the backend responds non-OK; the
+// `useBeacon*` hooks in `@/lib/hooks/useBeacon.ts` orchestrate that
+// graceful degradation with a "Modo demo" banner.
+
+export interface OverviewSummary {
+  mtd_email: number;
+  mtd_sms: number;
+  mtd_push: number;
+  mtd_wa: number;
+  mtd_spend_brl: number;
+  delivered_rate: number;
+  open_rate_email: number;
+  verified_domains: number;
+  total_domains: number;
+  generated_at: string;
+}
+
+export const overview = {
+  get: () => api<OverviewSummary>("/overview"),
+};
+
+export const templates = {
+  list: () => api<Array<{ id: string; name: string; channel: string; enabled: boolean }>>("/templates"),
+  get: (id: string) => api<{ id: string; name: string; body: string }>(`/templates/${id}`),
+  upsert: (body: unknown) => api("/templates", { method: "POST", body }),
+  remove: (id: string) => api<void>(`/templates/${id}`, { method: "DELETE" }),
+};
+
+export const smsNumbers = {
+  list: () => api<Array<{ id: string; number: string; country: string; status: string }>>("/sms-numbers"),
+};
+
+export const whatsapp = {
+  status: () => api<{ connected: boolean; quality_rating: string; templates_synced: number }>("/whatsapp"),
+  templates: () => api<Array<{ id: string; name: string; category: string; status: string }>>("/whatsapp/templates"),
+};
+
+export const webhooksMgmt = {
+  list: () => api<Array<{ id: string; url: string; events: string[]; status: string }>>("/webhooks"),
+  create: (body: unknown) => api("/webhooks", { method: "POST", body }),
+  remove: (id: string) => api<void>(`/webhooks/${id}`, { method: "DELETE" }),
+};
+
+export const team = {
+  list: () => api<Array<{ id: string; email: string; role: string }>>("/team"),
+};
+
+export const settings = {
+  get: () => api<{ org: Record<string, unknown> }>("/settings"),
+  update: (body: unknown) => api("/settings", { method: "PATCH", body }),
+};
+
+export const chain = {
+  list: (params?: { limit?: number }) =>
+    api<{ entries: Array<{ hash: string; ref: string | null; created_at: string }> }>(
+      `/chain${params ? "?" + new URLSearchParams(params as Record<string, string>).toString() : ""}`,
+    ),
+  verify: (hash: string) => api<{ valid: boolean; anchored_at: string | null }>(`/chain/${hash}/verify`),
+};
+
+export const deliverability = {
+  reputation: () =>
+    api<{ ip_pool_score: number; domain_score: number; mailbox_provider_scores: Record<string, number> }>(
+      "/deliverability/reputation",
+    ),
+};
+
+export const antispam = {
+  scores: () =>
+    api<{ tenant_score: number; flagged_24h: number; samples: Array<Record<string, unknown>> }>(
+      "/antispam/scores",
+    ),
+};

@@ -1,10 +1,15 @@
 import { PageHeader, PageContainer, Card, Badge, Table, Th, Td, timeAgo } from "@/components/beacon/ui";
+import { DemoBanner } from "@/components/beacon/DemoBanner";
 import { WEBHOOKS } from "@/content/beacon-mock";
+import { useBeaconWebhooks } from "@/lib/hooks/useBeacon";
 import { Webhook, Plus, Copy } from "lucide-react";
 
+// BCN-239: BeaconWebhooks wired to /v1/webhooks via TanStack hook.
 export default function BeaconWebhooks() {
+  const webhooksQ = useBeaconWebhooks();
   return (
     <PageContainer>
+      {webhooksQ.isDemo && <DemoBanner detail="GET /v1/webhooks indisponivel" />}
       <PageHeader
         title="Webhooks"
         subtitle="Receba eventos em tempo real: message.sent, .delivered, .opened, .clicked, .bounced, .complained, .unsubscribed. Assinatura HMAC-SHA256 + retry exponencial (até 24h)."

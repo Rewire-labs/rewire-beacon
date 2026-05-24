@@ -1,14 +1,15 @@
-import { useEffect, useState } from "react";
 import { PageHeader, PageContainer, Card, Badge } from "@/components/beacon/ui";
+import { DemoBanner } from "@/components/beacon/DemoBanner";
 import { JOURNEYS } from "@/content/beacon-mock";
+import { useBeaconJourneys } from "@/lib/hooks/useBeacon";
 import { Plus, Workflow, GitBranch, Play, Pause } from "lucide-react";
-import { journeys } from "@/lib/api";
 
+// BCN-233: BeaconJourneys wired to /v1/journeys via TanStack Query.
 export default function BeaconJourneys() {
-  const [_live, setLive] = useState<Array<{ id: string; name: string; status: string }>>([]);
-  useEffect(() => { journeys.list().then(setLive).catch(() => setLive([])); }, []);
+  const journeysQ = useBeaconJourneys();
   return (
     <PageContainer>
+      {journeysQ.isDemo && <DemoBanner detail="GET /v1/journeys indisponivel" />}
       <PageHeader
         title="Journeys multi-canal"
         subtitle="Workflows duráveis Temporal: 'Envia email; se não abrir em 24h, SMS; se não responder em 48h, WhatsApp'. Visual flow builder + signals + conditional branching."

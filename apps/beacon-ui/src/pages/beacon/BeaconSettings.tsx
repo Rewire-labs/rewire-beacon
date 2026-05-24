@@ -1,10 +1,15 @@
 import { PageHeader, PageContainer, Card, Badge } from "@/components/beacon/ui";
+import { DemoBanner } from "@/components/beacon/DemoBanner";
 import { BEACON_USER } from "@/content/beacon-mock";
+import { useBeaconSettings } from "@/lib/hooks/useBeacon";
 import { Settings as SettingsIcon, AlertTriangle, Bell, Globe, Clock } from "lucide-react";
 
+// BCN-247: BeaconSettings wired to /v1/settings.
 export default function BeaconSettings() {
+  const settingsQ = useBeaconSettings();
   return (
     <PageContainer>
+      {settingsQ.isDemo && <DemoBanner detail="GET /v1/settings indisponivel" />}
       <PageHeader title="Configurações" subtitle="Quiet hours, frequency capping, anti-bill-shock cap, regiões e BYOK." />
 
       <div className="grid lg:grid-cols-2 gap-4">

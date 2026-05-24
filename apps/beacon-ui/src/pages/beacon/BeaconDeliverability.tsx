@@ -1,10 +1,15 @@
 import { PageHeader, PageContainer, Card, ScoreBar, Table, Th, Td, Badge } from "@/components/beacon/ui";
+import { DemoBanner } from "@/components/beacon/DemoBanner";
 import { DELIVERABILITY, CHANNEL_LABELS, type Channel } from "@/content/beacon-mock";
+import { useBeaconDeliverability } from "@/lib/hooks/useBeacon";
 import { BellRing } from "lucide-react";
 
+// BCN-245: BeaconDeliverability wired to /v1/deliverability/reputation.
 export default function BeaconDeliverability() {
+  const delivQ = useBeaconDeliverability();
   return (
     <PageContainer>
+      {delivQ.isDemo && <DemoBanner detail="GET /v1/deliverability/reputation indisponivel" />}
       <PageHeader
         title="Deliverability"
         subtitle="Postal IPs próprios + AWS SES BR fallback para email. APNs/FCM para push (grátis). Zenvia/TotalVoice para SMS via operadoras BR. Alvo: >98% delivered."

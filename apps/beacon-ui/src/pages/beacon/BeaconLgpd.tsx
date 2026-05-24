@@ -1,13 +1,17 @@
 import { useState } from "react";
 import { PageHeader, PageContainer, Card, Badge, Table, Th, Td, timeAgo, fmtDate } from "@/components/beacon/ui";
+import { DemoBanner } from "@/components/beacon/DemoBanner";
 import { DSAR_REQUESTS } from "@/content/beacon-mock";
+import { useBeaconLgpd } from "@/lib/hooks/useBeacon";
 import { FileCheck, Plus, AlertCircle } from "lucide-react";
 import { lgpd } from "@/lib/api";
 
 const TYPE_LABEL = { access: "Acesso", deletion: "Exclusão", portability: "Portabilidade" };
 const STATUS_TONE = { received: "warn" as const, in_progress: "warn" as const, fulfilled: "ok" as const };
 
+// BCN-242: BeaconLgpd wired to /v1/audit/lgpd/dsar via TanStack hook.
 export default function BeaconLgpd() {
+  const lgpdQ = useBeaconLgpd();
   const pending = DSAR_REQUESTS.filter((d) => d.status !== "fulfilled").length;
   const [creating, setCreating] = useState(false);
   const [email, setEmail] = useState("");
@@ -25,6 +29,7 @@ export default function BeaconLgpd() {
   }
   return (
     <PageContainer>
+      {lgpdQ.isDemo && <DemoBanner detail="GET /v1/audit/lgpd/dsar indisponivel" />}
       <PageHeader
         title="LGPD · DSAR"
         subtitle="Direito do titular de dados (Art. 18). DSAR fulfillment automático."

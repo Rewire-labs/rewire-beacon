@@ -1,22 +1,20 @@
-import { useEffect, useState } from "react";
 import { PageHeader, PageContainer, Card, Table, Th, Td } from "@/components/beacon/ui";
+import { DemoBanner } from "@/components/beacon/DemoBanner";
 import { BEACON_USER, BILLING_BREAKDOWN, TIER_LABELS } from "@/content/beacon-mock";
+import { useBeaconBilling } from "@/lib/hooks/useBeacon";
 import { Receipt, Download, FileText, TrendingUp } from "lucide-react";
-import { billing } from "@/lib/api";
 
+// BCN-243: BeaconBilling wired to /v1/billing/* via TanStack hook.
 export default function BeaconBilling() {
-  const [usage, setUsage] = useState<Record<string, number> | null>(null);
-  useEffect(() => {
-    billing.usageMtd()
-      .then((u) => setUsage(u.counts))
-      .catch(() => setUsage(null));
-  }, []);
+  const billingQ = useBeaconBilling();
+  const usage = billingQ.usage.data.counts;
   const liveEmail = usage?.email ?? BEACON_USER.mtd_email;
   const liveSms = usage?.sms ?? BEACON_USER.mtd_sms;
   const liveWa = usage?.whatsapp ?? BEACON_USER.mtd_wa;
   const total = BILLING_BREAKDOWN.reduce((s, b) => s + b.total_brl, 0);
   return (
     <PageContainer>
+      {billingQ.isDemo && <DemoBanner detail="GET /v1/billing/* indisponivel" />}
       <PageHeader
         title="Billing & uso"
         subtitle={`Plano ${TIER_LABELS[BEACON_USER.tier]} · faturamento mensal via Asaas BR · NF-e emitida automaticamente. Anti-bill-shock: limite global R$ ${BEACON_USER.mtd_cap_brl.toLocaleString("pt-BR")} ativo.`}

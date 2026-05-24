@@ -1,10 +1,15 @@
 import { PageHeader, PageContainer, Card, Badge, Table, Th, Td } from "@/components/beacon/ui";
+import { DemoBanner } from "@/components/beacon/DemoBanner";
 import { SMS_NUMBERS } from "@/content/beacon-mock";
+import { useBeaconSmsNumbers } from "@/lib/hooks/useBeacon";
 import { Plus, Phone } from "lucide-react";
 
+// BCN-236: BeaconSmsNumbers wired to /v1/sms-numbers.
 export default function BeaconSmsNumbers() {
+  const smsQ = useBeaconSmsNumbers();
   return (
     <PageContainer>
+      {smsQ.isDemo && <DemoBanner detail="GET /v1/sms-numbers indisponivel" />}
       <PageHeader
         title="SMS · Números BR"
         subtitle="Short codes (5 dígitos) para alto volume e long codes (DDD +55) via Zenvia (primário) + TotalVoice (fallback). Cobertura nacional Vivo/TIM/Claro/Oi."

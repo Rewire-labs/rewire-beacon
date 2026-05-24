@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { PageHeader, PageContainer, Card, Badge, Table, Th, Td, timeAgo } from "@/components/beacon/ui";
+import { DemoBanner } from "@/components/beacon/DemoBanner";
 import { suppression, type SuppressionEntry, ApiError } from "@/lib/api";
 import { SUPPRESSIONS } from "@/content/beacon-mock";
+import { useBeaconSuppression } from "@/lib/hooks/useBeacon";
 import { Ban, Plus, Trash2 } from "lucide-react";
 
 const REASON_LABEL: Record<string, string> = {
@@ -14,7 +16,11 @@ const REASON_LABEL: Record<string, string> = {
   blocked: "Bloqueado",
 };
 
+// BCN-234: BeaconSuppression — keep the legacy useState/useEffect path for
+// the mutation flow (add/remove) and overlay the TanStack hook to drive
+// the "Modo demo" banner when /v1/suppression is unreachable.
 export default function BeaconSuppression() {
+  const supQ = useBeaconSuppression({ limit: 100 });
   const [entries, setEntries] = useState<SuppressionEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
@@ -65,6 +71,7 @@ export default function BeaconSuppression() {
 
   return (
     <PageContainer>
+      {supQ.isDemo && <DemoBanner detail="GET /v1/suppression indisponivel" />}
       <PageHeader
         title="Suppression list cross-canal"
         subtitle="Lista unica por organizacao: opt-out de email vale para SMS, WhatsApp e push. LGPD Art. 18."

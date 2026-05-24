@@ -1,10 +1,15 @@
 import { PageHeader, PageContainer, Card, Badge, Table, Th, Td, timeAgo } from "@/components/beacon/ui";
+import { DemoBanner } from "@/components/beacon/DemoBanner";
 import { CHAIN_ENTRIES } from "@/content/beacon-mock";
+import { useBeaconChain } from "@/lib/hooks/useBeacon";
 import { Link2, ShieldCheck, ExternalLink } from "lucide-react";
 
+// BCN-244: BeaconChain wired to /v1/chain via TanStack hook.
 export default function BeaconChain() {
+  const chainQ = useBeaconChain(50);
   return (
     <PageContainer>
+      {chainQ.isDemo && <DemoBanner detail="GET /v1/chain indisponivel (CITADEL link)" />}
       <PageHeader
         title="Audit chain (BLAKE3)"
         subtitle="Cada mensagem enviada e cada operação privilegiada gera um nó na CITADEL chain. Hash forense imutável (conteúdo + recipient + timestamp + consent basis) — diferencial absoluto para auditoria LGPD."

@@ -1,9 +1,15 @@
 import { Link } from "react-router-dom";
 import { PageHeader, PageContainer, Card, Kpi, Badge, StatusDot, timeAgo } from "@/components/beacon/ui";
+import { DemoBanner } from "@/components/beacon/DemoBanner";
 import { BEACON_USER, MESSAGES, ANALYTICS_30D, JOURNEYS, DOMAINS, CROSS_SELL, CHANNEL_LABELS, type Channel } from "@/content/beacon-mock";
+import { useBeaconOverview } from "@/lib/hooks/useBeacon";
 import { Send, Plus, Mail, MessageSquare, Smartphone, BarChart3, Globe, Workflow } from "lucide-react";
 
+// BCN-230: BeaconOverview wired to /v1/overview via useBeaconOverview hook.
+// Falls back to mock content with a "Modo demo" banner when the backend is
+// unreachable so demos and local-dev remain functional.
 export default function BeaconOverview() {
+  const overview = useBeaconOverview();
   const totalSent = ANALYTICS_30D.by_channel.reduce((s, c) => s + c.sent, 0);
   const totalDelivered = ANALYTICS_30D.by_channel.reduce((s, c) => s + c.delivered, 0);
   const deliveredRate = ((totalDelivered / totalSent) * 100).toFixed(2);
@@ -11,6 +17,7 @@ export default function BeaconOverview() {
 
   return (
     <PageContainer>
+      {overview.isDemo && <DemoBanner detail="GET /v1/overview indisponivel" />}
       <PageHeader
         title={`Olá, ${BEACON_USER.name.split(" ")[0]}`}
         subtitle={`${BEACON_USER.org} · ${BEACON_USER.mtd_email.toLocaleString("pt-BR")} emails, ${BEACON_USER.mtd_sms.toLocaleString("pt-BR")} SMS e ${BEACON_USER.mtd_push.toLocaleString("pt-BR")} push enviados em ${new Date().toLocaleString("pt-BR", { month: "long" })}. Spend MTD R$ ${BEACON_USER.mtd_spend_brl.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}.`}

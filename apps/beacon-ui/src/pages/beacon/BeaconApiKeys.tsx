@@ -1,10 +1,15 @@
 import { useEffect, useState } from "react";
 import { PageHeader, PageContainer, Card, Badge, Table, Th, Td, timeAgo } from "@/components/beacon/ui";
+import { DemoBanner } from "@/components/beacon/DemoBanner";
 import { apiTokens, type ApiToken, ApiError } from "@/lib/api";
 import { API_KEYS } from "@/content/beacon-mock";
+import { useBeaconApiKeys } from "@/lib/hooks/useBeacon";
 import { Plus, KeyRound, Copy, Eye, Trash2 } from "lucide-react";
 
+// BCN-241: BeaconApiKeys — keep useState/useEffect for mutations; TanStack
+// hook drives the demo banner.
 export default function BeaconApiKeys() {
+  const apiKeysQ = useBeaconApiKeys();
   const [tokens, setTokens] = useState<ApiToken[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -65,6 +70,7 @@ export default function BeaconApiKeys() {
 
   return (
     <PageContainer>
+      {apiKeysQ.isDemo && <DemoBanner detail="GET /v1/api-tokens indisponivel" />}
       <PageHeader
         title="API keys"
         subtitle="Tokens por tenant via Authentik OIDC + scopes granulares. Use Bearer auth no header `Authorization: Bearer bcn_live_...`."

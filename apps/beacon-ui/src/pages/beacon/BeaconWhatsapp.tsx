@@ -1,5 +1,7 @@
 import { PageHeader, PageContainer, Card, Badge } from "@/components/beacon/ui";
+import { DemoBanner } from "@/components/beacon/DemoBanner";
 import { WA_NUMBERS } from "@/content/beacon-mock";
+import { useBeaconWhatsapp } from "@/lib/hooks/useBeacon";
 import { MessageSquare, Plus, ExternalLink } from "lucide-react";
 
 const QUALITY_TONE: Record<string, "ok" | "warn" | "bad"> = { green: "ok", yellow: "warn", red: "bad" };
@@ -7,9 +9,12 @@ const TIER_LABEL: Record<string, string> = {
   tier_1k: "1k msgs/24h", tier_10k: "10k msgs/24h", tier_100k: "100k msgs/24h", tier_unlimited: "Ilimitado",
 };
 
+// BCN-237: BeaconWhatsapp wired to /v1/whatsapp via TanStack hooks.
 export default function BeaconWhatsapp() {
+  const wa = useBeaconWhatsapp();
   return (
     <PageContainer>
+      {wa.isDemo && <DemoBanner detail="GET /v1/whatsapp indisponivel (depende CONNECT GA)" />}
       <PageHeader
         title="WhatsApp Business (via CONNECT)"
         subtitle="BEACON delega envio WhatsApp para CONNECT API interna. Templates aprovados Meta sincronizados. Janelas 24h e quality rating gerenciados pelo CONNECT."

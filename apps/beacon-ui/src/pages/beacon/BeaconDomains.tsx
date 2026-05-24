@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { PageHeader, PageContainer, Card, Badge, ScoreBar } from "@/components/beacon/ui";
+import { DemoBanner } from "@/components/beacon/DemoBanner";
 import { domains, type EmailDomain, ApiError } from "@/lib/api";
 import { DOMAINS } from "@/content/beacon-mock";
+import { useBeaconDomains } from "@/lib/hooks/useBeacon";
 import { Plus, Globe, Check, X, Copy } from "lucide-react";
 
 interface DomainRow extends EmailDomain {
@@ -9,7 +11,10 @@ interface DomainRow extends EmailDomain {
   sent_30d?: number;
 }
 
+// BCN-235: BeaconDomains — wire TanStack hook for the demo-banner signal
+// while keeping the existing useState/useEffect mutation path.
 export default function BeaconDomains() {
+  const domainsQ = useBeaconDomains();
   const [rows, setRows] = useState<EmailDomain[]>([]);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
@@ -67,6 +72,7 @@ export default function BeaconDomains() {
 
   return (
     <PageContainer>
+      {domainsQ.isDemo && <DemoBanner detail="GET /v1/domains indisponivel" />}
       <PageHeader
         title="Email - Dominios"
         subtitle="DKIM 2048-bit gerado automaticamente pelo Postal. SPF assistido + DMARC reporting agregado."

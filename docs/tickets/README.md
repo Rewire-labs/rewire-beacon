@@ -206,25 +206,25 @@ Cliente HTTP base existe (`apps/beacon-ui/src/lib/api.ts`). Hooks TanStack Query
 
 | ID | Título | Status | Owner |
 |---|---|---|---|
-| [[BCN-230]] | UI wire BeaconOverview | [ ] | frontend |
-| [[BCN-231]] | UI wire BeaconMessages | [ ] | frontend |
-| [[BCN-232]] | UI wire BeaconTemplates | [ ] | frontend |
-| [[BCN-233]] | UI wire BeaconJourneys | [ ] | frontend |
-| [[BCN-234]] | UI wire BeaconSuppression | [ ] | frontend |
-| [[BCN-235]] | UI wire BeaconDomains | [ ] | frontend |
-| [[BCN-236]] | UI wire BeaconSmsNumbers | [ ] | frontend |
-| [[BCN-237]] | UI wire BeaconWhatsapp | [ ] | frontend |
-| [[BCN-238]] | UI wire BeaconPushApps | [ ] | frontend |
-| [[BCN-239]] | UI wire BeaconWebhooks | [ ] | frontend |
-| [[BCN-240]] | UI wire BeaconAnalytics | [ ] | frontend |
-| [[BCN-241]] | UI wire BeaconApiKeys | [ ] | frontend |
-| [[BCN-242]] | UI wire BeaconLgpd | [ ] | frontend |
-| [[BCN-243]] | UI wire BeaconBilling | [ ] | frontend |
-| [[BCN-244]] | UI wire BeaconChain | [ ] | frontend |
-| [[BCN-245]] | UI wire BeaconDeliverability | [ ] | frontend |
-| [[BCN-246]] | UI wire BeaconAntispam | [ ] | frontend |
-| [[BCN-247]] | UI wire BeaconSettings | [ ] | frontend |
-| [[BCN-248]] | UI wire BeaconTeam | [ ] | frontend |
+| [[BCN-230]] | UI wire BeaconOverview | [x] | frontend |
+| [[BCN-231]] | UI wire BeaconMessages | [x] | frontend |
+| [[BCN-232]] | UI wire BeaconTemplates | [x] | frontend |
+| [[BCN-233]] | UI wire BeaconJourneys | [x] | frontend |
+| [[BCN-234]] | UI wire BeaconSuppression | [x] | frontend |
+| [[BCN-235]] | UI wire BeaconDomains | [x] | frontend |
+| [[BCN-236]] | UI wire BeaconSmsNumbers | [x] | frontend |
+| [[BCN-237]] | UI wire BeaconWhatsapp | [x] | frontend |
+| [[BCN-238]] | UI wire BeaconPushApps | [x] | frontend |
+| [[BCN-239]] | UI wire BeaconWebhooks | [x] | frontend |
+| [[BCN-240]] | UI wire BeaconAnalytics | [x] | frontend |
+| [[BCN-241]] | UI wire BeaconApiKeys | [x] | frontend |
+| [[BCN-242]] | UI wire BeaconLgpd | [x] | frontend |
+| [[BCN-243]] | UI wire BeaconBilling | [x] | frontend |
+| [[BCN-244]] | UI wire BeaconChain | [x] | frontend |
+| [[BCN-245]] | UI wire BeaconDeliverability | [x] | frontend |
+| [[BCN-246]] | UI wire BeaconAntispam | [x] | frontend |
+| [[BCN-247]] | UI wire BeaconSettings | [x] | frontend |
+| [[BCN-248]] | UI wire BeaconTeam | [x] | frontend |
 
 ## Phase 14 — Cluster Fase 3 handoff
 

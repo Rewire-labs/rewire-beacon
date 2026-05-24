@@ -1,12 +1,17 @@
 import { PageHeader, PageContainer, Card, Badge, Table, Th, Td, timeAgo } from "@/components/beacon/ui";
+import { DemoBanner } from "@/components/beacon/DemoBanner";
 import { ANTISPAM_ALERTS } from "@/content/beacon-mock";
+import { useBeaconAntispam } from "@/lib/hooks/useBeacon";
 import { AlertTriangle, Shield, Brain } from "lucide-react";
 
 const SEV_TONE = { low: "ok" as const, medium: "warn" as const, high: "warn" as const, critical: "bad" as const };
 
+// BCN-246: BeaconAntispam wired to /v1/antispam/scores.
 export default function BeaconAntispam() {
+  const antispamQ = useBeaconAntispam();
   return (
     <PageContainer>
+      {antispamQ.isDemo && <DemoBanner detail="GET /v1/antispam/scores indisponivel" />}
       <PageHeader
         title="Anti-spam ML"
         subtitle="Python services com scikit-learn + sentence-transformers. Detecta padrões suspeitos (cliente novo enviando 100k emails/h, conteúdo semanticamente igual ao de listas compradas, recipient domains sintéticos)."
