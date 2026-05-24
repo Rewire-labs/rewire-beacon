@@ -200,6 +200,32 @@ endpoint estiver pronto.
 | [[BCN-167]] | Wiring `BeaconAntispam.tsx` (ML score per tenant) | [x] | frontend |
 | [[BCN-168]] | Wiring `BeaconSettings.tsx` + `BeaconTeam.tsx` | [x] | frontend |
 
+### Phase-13 UI wiring (gap pós-auditoria 2026-05-23)
+
+Cliente HTTP base existe (`apps/beacon-ui/src/lib/api.ts`). Hooks TanStack Query a criar + plug em cada page substituindo mock. 19 tickets S (2-4h cada).
+
+| ID | Título | Status | Owner |
+|---|---|---|---|
+| [[BCN-230]] | UI wire BeaconOverview | [ ] | frontend |
+| [[BCN-231]] | UI wire BeaconMessages | [ ] | frontend |
+| [[BCN-232]] | UI wire BeaconTemplates | [ ] | frontend |
+| [[BCN-233]] | UI wire BeaconJourneys | [ ] | frontend |
+| [[BCN-234]] | UI wire BeaconSuppression | [ ] | frontend |
+| [[BCN-235]] | UI wire BeaconDomains | [ ] | frontend |
+| [[BCN-236]] | UI wire BeaconSmsNumbers | [ ] | frontend |
+| [[BCN-237]] | UI wire BeaconWhatsapp | [ ] | frontend |
+| [[BCN-238]] | UI wire BeaconPushApps | [ ] | frontend |
+| [[BCN-239]] | UI wire BeaconWebhooks | [ ] | frontend |
+| [[BCN-240]] | UI wire BeaconAnalytics | [ ] | frontend |
+| [[BCN-241]] | UI wire BeaconApiKeys | [ ] | frontend |
+| [[BCN-242]] | UI wire BeaconLgpd | [ ] | frontend |
+| [[BCN-243]] | UI wire BeaconBilling | [ ] | frontend |
+| [[BCN-244]] | UI wire BeaconChain | [ ] | frontend |
+| [[BCN-245]] | UI wire BeaconDeliverability | [ ] | frontend |
+| [[BCN-246]] | UI wire BeaconAntispam | [ ] | frontend |
+| [[BCN-247]] | UI wire BeaconSettings | [ ] | frontend |
+| [[BCN-248]] | UI wire BeaconTeam | [ ] | frontend |
+
 ## Phase 14 — Cluster Fase 3 handoff
 
 | ID | Título | Status | Owner |
