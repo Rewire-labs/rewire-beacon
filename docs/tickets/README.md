@@ -282,6 +282,25 @@ Cliente HTTP base existe (`apps/beacon-ui/src/lib/api.ts`). Hooks TanStack Query
 |---|---|---|---|
 | [[BCN-AICX-01]] | `POST /agent/v1/invoke` endpoint canonical + 6 handlers | [x] | backend |
 
+## Phase 17 — Gap pass-2 (audit 2026-05-24)
+
+Tickets detectados em pass-2 audit pos-ALL_DONE Round 6. Total: 12.
+
+- [ ] [[BCN-V2001]] Helm chart control-plane completo (Deploy+HPA+PDB+PrometheusRule) — Infra critical gap
+- [ ] [[BCN-V2002]] Handlers real wire (Postal/CITADEL chain/ClickHouse) — Backend wire-up
+- [ ] [[BCN-V2003]] Postal cluster deploy 8 nodes + 60 IPs BR (BCN-020) — Infra
+- [ ] [[BCN-V2004]] E2E mail test full flow (BCN-029) — QA
+- [ ] [[BCN-V2005]] ClickHouse cluster deploy 3 nodes (BCN-090) — Infra
+- [ ] [[BCN-V2006]] Strimzi Kafka topics provisioning (BCN-092) — Infra
+- [ ] [[BCN-V2007]] Temporal cluster wire compartilhado (BCN-100) — Infra
+- [ ] [[BCN-V2008]] Idempotency Redis-backed substituir in-memory — Multi-replica safety
+- [ ] [[BCN-V2009]] Anti-spam ML training data pipeline (BCN-115) — Data/ML
+- [ ] [[BCN-V2010]] SDK iOS Swift + Android Kotlin publish (BCN-066) — Mobile
+- [ ] [[BCN-V2011]] Deliverability Mail Tester CI check (BCN-203) — QA nightly
+- [ ] [[BCN-V2012]] Acordo comercial Zenvia/TotalVoice revenue share (BCN-056) — Commercial
+
+**Categoria principal**: Infra deploy (Postal/ClickHouse/Strimzi/Temporal/Helm chart) + handlers real wiring + Mobile SDKs.
+
 ## Convenções
 
 - IDs `BCN-XXX` monotonicamente crescentes
