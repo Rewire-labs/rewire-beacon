@@ -1,9 +1,10 @@
-# BEACON — Notification Platform Multi-Canal BR
+# BEACON — Notification Platform Multi-Canal BR (LEGACY SPEC pre-consolidacao)
 
-> **Spec autoritativa do produto** — extraida de `rewire_cluster/docs/futuros_produtos/`.
+> **DEPRECATED HEADER (2026-05-24)** — pos-ADR 0108 secao C2, `rewire-beacon` foi consolidado em `rewire-messaging` (umbrella todos canais, fusao com `rewire-notify`). Este documento permanece como **referencia historica** da spec V0 push/SMS. Para implementacao atual ver `README.md` e `architecture/products/messaging/` no monorepo rewire_cluster.
+>
+> **Spec autoritativa pre-consolidacao** — extraida de `rewire_cluster/docs/futuros_produtos/`.
 > Mantida no root do repo do produto pra implementadores nao precisarem cross-repo lookup.
-> Quando mudar, atualizar AMBOS lados (single-source-of-truth do produto continua
-> sendo o monorepo `rewire_cluster`).
+> Pos-ADR 0108 single-source-of-truth e o produto consolidado `rewire-messaging`.
 
 ---
 
