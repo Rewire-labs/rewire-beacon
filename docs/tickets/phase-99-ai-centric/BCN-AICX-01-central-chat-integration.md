@@ -7,7 +7,7 @@
 - [[INTER_AGENT_COMM_SPEC]] (`services/INTER_AGENT_COMM_SPEC.md`) — protocolo `/agent/v1/invoke`
 - [[CROSS_AGENT_AUTH_ADR]] (`services/CROSS_AGENT_AUTH_ADR.md`) — JWT M2M `agents.rewire.svc`
 - [[CENTRAL_AI_CHAT_SPEC]] (`services/CENTRAL_AI_CHAT_SPEC.md`) — escopo cliente do contract
-- [[APP-ADR-0015]] (`services/rewire-app/docs/adr/0015-central-ai-chat-orchestrator.md`) — ADR canonical
+- [[APP-ADR-0017]] (`services/rewire-app/docs/adr/0017-central-ai-chat-orchestrator.md`) — ADR canonical
 - [[ADR-cluster-0107]] (`docs/adr/0107-central-ai-chat-orchestrator-canonical-v0.md`) — ADR cluster
 - BCN-CAP-01 (já criado em `phase-9-capability-registry/`) — REST registry baseline
 
@@ -19,7 +19,7 @@
 
 A Rewire opera modelo **IA-centric**: cliente conversa com chat único
 em `services/rewire-app/apps/chat-orchestrator/` (vide
-[[APP-ADR-0015]]) que decompõe pedido NL PT-BR, descobre capabilities
+[[APP-ADR-0017]]) que decompõe pedido NL PT-BR, descobre capabilities
 via aggregator rewire-mcp ([[ADR-cluster-0106]]), **roteia para
 master** (ASCEND ou FOUNDRY, [[MASTER_ORCHESTRATORS_SPEC]]) quando
 intent envolve composição de software, ou **invoca capability atômica
@@ -195,7 +195,7 @@ porta do `/agent/v1/invoke`.
 - [[CROSS_AGENT_AUTH_ADR]] — `services/CROSS_AGENT_AUTH_ADR.md`
 - [[MASTER_ORCHESTRATORS_SPEC]] — `services/MASTER_ORCHESTRATORS_SPEC.md`
 - [[AI_INVENTORY]] — `services/AI_INVENTORY.md`
-- [[APP-ADR-0015]] — `services/rewire-app/docs/adr/0015-central-ai-chat-orchestrator.md`
+- [[APP-ADR-0017]] — `services/rewire-app/docs/adr/0017-central-ai-chat-orchestrator.md`
 - [[ADR-cluster-0106]] — `docs/adr/0106-capability-registry-mcp-canonical-v0.md`
 - [[ADR-cluster-0107]] — `docs/adr/0107-central-ai-chat-orchestrator-canonical-v0.md`
 - [[ADR-0037-foundry]] — V2 deepagents canonical
