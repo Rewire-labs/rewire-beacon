@@ -46,6 +46,33 @@ def _configure_logging(level: str) -> None:
     )
 
 
+async def _aggregator_invalidate(logger_: structlog.stdlib.BoundLogger) -> None:
+    """BCN-CAP-01: fire-and-forget aggregator invalidate webhook.
+
+    Tells the central rewire-mcp aggregator to re-pull the capability
+    registry so the chat-orchestrator sees the fresh contract after
+    a deploy. URL via env ``REWIRE_AGGREGATOR_URL``. No-op if unset.
+    """
+    import os as _os
+
+    base = (_os.environ.get("REWIRE_AGGREGATOR_URL", "") or "").rstrip("/")
+    if not base:
+        return
+    try:
+        import httpx as _httpx
+
+        async with _httpx.AsyncClient(timeout=2.0) as ac:
+            await ac.post(
+                f"{base}/aggregator/invalidate",
+                json={"service": "rewire-beacon", "reason": "deploy"},
+            )
+        logger_.info("capability_registry.aggregator_invalidated")
+    except Exception as exc:  # noqa: BLE001
+        logger_.warning(
+            "capability_registry.aggregator_invalidate.failed", error=str(exc)
+        )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Startup/shutdown lifecycle — V0 minimal (sem DB connect, sem workers)."""
@@ -58,6 +85,21 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         environment=s.environment,
     )
     app.state.settings = s
+    # BCN-CAP-01: lazy-load capability registry to fail fast on malformed
+    # YAML at boot (not on first request).
+    try:
+        from beacon.agents.capability_loader import get_registry
+
+        _reg = get_registry()
+        logger.info(
+            "beacon.capability_registry.loaded",
+            count=len(_reg.capabilities),
+            etag=_reg.etag,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("beacon.capability_registry.load_failed", error=str(exc))
+    # BCN-CAP-01: ping aggregator post-start (fire-and-forget).
+    await _aggregator_invalidate(logger)
     try:
         yield
     finally:
@@ -100,6 +142,16 @@ def create_app() -> FastAPI:
     app.add_middleware(AuthMiddleware)
 
     app.include_router(api_router, prefix="/v1")
+
+    # BCN-CAP-01 + BCN-AICX-01 — canonical agent registry + invoke endpoints.
+    # Lazy import so legacy tests/installer flows don't pay the YAML-load cost
+    # at import time.
+    from beacon.agents.agent_invoke_router import router as _agent_invoke_router
+    from beacon.agents.capabilities_router import router as _capabilities_router
+
+    app.include_router(_capabilities_router)     # GET /api/v1/capabilities
+    app.include_router(_agent_invoke_router)     # POST /agent/v1/invoke
+
     return app
 
 

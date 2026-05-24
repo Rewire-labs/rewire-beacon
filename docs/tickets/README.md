@@ -261,6 +261,27 @@ Cliente HTTP base existe (`apps/beacon-ui/src/lib/api.ts`). Hooks TanStack Query
 | [[BCN-226]] | `docs/cluster-integration/` (5 docs equivalentes outros services) | [x] | docs |
 | [[BCN-227]] | OpenAPI spec dump em `docs/api/openapi.yaml` + CI check | [x] | backend |
 
+## Phase 6 — Inter-agent communication (canonical INTER_AGENT_COMM_SPEC)
+
+| ID | Título | Status | Owner |
+|---|---|---|---|
+| [[BCN-100]] | AgentBusClient cross-agent REST client (retry + idempotency + audit) | [x] | backend |
+| [[BCN-101]] | RabbitMQ producer/consumer topics canonical (mock mode + RMQ) | [x] | backend |
+| [[BCN-102]] | Budget propagation via X-Rewire-Tenant-Budget header | [x] | backend |
+| [[BCN-103]] | OpenTelemetry span cross-agent (rewire.agent.call/serve) | [x] | backend |
+
+## Phase 9 — Capability registry (ADR-0106)
+
+| ID | Título | Status | Owner |
+|---|---|---|---|
+| [[BCN-CAP-01]] | Expor `GET /api/v1/capabilities` canonical + capabilities.yaml | [x] | platform |
+
+## Phase 99 — AI-centric chat orchestrator integration
+
+| ID | Título | Status | Owner |
+|---|---|---|---|
+| [[BCN-AICX-01]] | `POST /agent/v1/invoke` endpoint canonical + 6 handlers | [x] | backend |
+
 ## Convenções
 
 - IDs `BCN-XXX` monotonicamente crescentes

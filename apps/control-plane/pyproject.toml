@@ -27,6 +27,11 @@ dependencies = [
   "opentelemetry-instrumentation-fastapi>=0.46b0",
   "redis>=5.0.0",
   "aiosqlite>=0.20.0",
+  # BCN-CAP-01 + BCN-AICX-01: capability registry + agent invoke.
+  "PyYAML>=6.0.1",
+  "jsonschema>=4.22.0",
+  # BCN-101: cross-agent RabbitMQ bus.
+  "aio-pika>=9.4.0",
 ]
 
 [project.optional-dependencies]

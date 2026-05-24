@@ -42,6 +42,13 @@ PUBLIC_PATH_PREFIXES = (
     "/openapi.json",
     "/v1/webhooks/inbound/",
     "/v1/u/",
+    # BCN-CAP-01: capability registry is intentionally public (no secrets in
+    # contract — only schemas + audit event names).
+    "/api/v1/capabilities",
+    # BCN-AICX-01: agent invoke does its own JWT validation per
+    # INTER_AGENT_COMM_SPEC §1.2 (agents.rewire.svc audience, distinct
+    # JWKS path) — bypass the UI/SDK AuthMiddleware here.
+    "/agent/v1/",
 )
 
 API_TOKEN_PREFIX = "bcn_"

@@ -28,6 +28,11 @@ PUBLIC_PATH_PREFIXES = (
     "/openapi.json",
     "/v1/webhooks/inbound/",
     "/v1/u/",
+    # BCN-CAP-01 + BCN-AICX-01: canonical agent endpoints are tenant-aware
+    # at the application layer (via X-Rewire-Tenant-Id header) — bypass
+    # the SDK/UI tenancy resolver.
+    "/api/v1/capabilities",
+    "/agent/v1/",
 )
 
 

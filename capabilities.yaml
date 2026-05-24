@@ -1,0 +1,372 @@
+# =============================================================================
+# BCN-CAP-01 — BEACON capability registry (REST canonical)
+# =============================================================================
+# Schema canonical: services/CAPABILITY_REGISTRY_SPEC.md
+# Endpoint:        GET /api/v1/capabilities (ETag-aware; 304 supported)
+# Aggregator hook: POST $REWIRE_AGGREGATOR_URL/aggregator/invalidate
+#                  fired by lifecycle postStart (BCN-CAP-01 + BCN-AICX-01)
+# =============================================================================
+
+service: rewire-beacon
+version: "0.1.0"
+
+capabilities:
+
+  - id: rewire.beacon.send_email
+    name: "Send a transactional email (multi-tenant)"
+    description: |
+      Enqueue a transactional email for a tenant via the BEACON dispatch
+      pipeline (Postal primary, AWS SES BR fallback). Wraps the existing
+      `POST /v1/messages/email` flow: suppression check, sender validation,
+      anti-spam pre-flight, idempotency dedupe, CITADEL chain anchor,
+      ClickHouse event emission. Returns message_id + chain_hash.
+    version: "1.0.0"
+    category: dispatch
+    invoke:
+      transport: rest
+      endpoint: /agent/v1/invoke
+      schema:
+        input:
+          $schema: https://json-schema.org/draft/2020-12/schema
+          type: object
+          additionalProperties: false
+          required: [tenant_id, sender, to, subject, consent_basis]
+          properties:
+            tenant_id:
+              type: string
+              format: uuid
+            sender:
+              type: string
+              format: email
+            to:
+              type: array
+              items:
+                type: string
+                format: email
+              minItems: 1
+              maxItems: 50
+            subject:
+              type: string
+              minLength: 1
+              maxLength: 512
+            html_body:
+              type: string
+              maxLength: 1048576
+            plain_body:
+              type: string
+              maxLength: 524288
+            template_slug:
+              type: string
+              maxLength: 128
+            consent_basis:
+              type: string
+              enum: [consent, contract, legal_obligation, legitimate_interest]
+            metadata:
+              type: object
+              additionalProperties: { type: string }
+        output:
+          $schema: https://json-schema.org/draft/2020-12/schema
+          type: object
+          required: [message_id, status, chain_hash, provider_route]
+          properties:
+            message_id: { type: string }
+            status: { type: string, enum: [queued, sent, failed] }
+            chain_hash: { type: string }
+            provider_route: { type: string, enum: [postal, aws_ses, fallback] }
+    budget:
+      per_call_max_seconds: 5
+      per_call_tokens: 0          # deterministic dispatch, no LLM in hot path
+    permissions:
+      requires_oauth: true
+      scopes: [beacon.messages.send]
+      requires_hitl: false
+      sensitivity: medium
+    audit:
+      emit_event: rewire.beacon.send_email.invoked
+    deprecation:
+      deprecated_at: null
+      sunset_at: null
+
+  - id: rewire.beacon.send_sms
+    name: "Send an SMS via BR BSP (Zenvia primary, TotalVoice fallback)"
+    description: |
+      Enqueue an SMS for a tenant via BR Business Service Provider routing.
+      Wraps `POST /v1/messages/sms`: E.164 validation, suppression cross-channel
+      check, GSM-7 segmentation, BSP routing per cost optimization, CITADEL
+      chain anchor. Returns message_id + chain_hash + provider_route used.
+    version: "1.0.0"
+    category: dispatch
+    invoke:
+      transport: rest
+      endpoint: /agent/v1/invoke
+      schema:
+        input:
+          $schema: https://json-schema.org/draft/2020-12/schema
+          type: object
+          additionalProperties: false
+          required: [tenant_id, to, text, consent_basis]
+          properties:
+            tenant_id: { type: string, format: uuid }
+            to:
+              type: string
+              pattern: "^\\+[1-9]\\d{6,14}$"
+            text:
+              type: string
+              minLength: 1
+              maxLength: 918  # 6 GSM-7 segments
+            from_number:
+              type: string
+              maxLength: 20
+            template_slug:
+              type: string
+              maxLength: 128
+            consent_basis:
+              type: string
+              enum: [consent, contract, legal_obligation, legitimate_interest]
+        output:
+          $schema: https://json-schema.org/draft/2020-12/schema
+          type: object
+          required: [message_id, status, chain_hash, provider_route]
+          properties:
+            message_id: { type: string }
+            status: { type: string, enum: [queued, sent, failed] }
+            chain_hash: { type: string }
+            provider_route: { type: string, enum: [zenvia, totalvoice, fallback] }
+    budget:
+      per_call_max_seconds: 5
+      per_call_tokens: 0
+    permissions:
+      requires_oauth: true
+      scopes: [beacon.messages.send]
+      requires_hitl: false
+      sensitivity: medium
+    audit:
+      emit_event: rewire.beacon.send_sms.invoked
+    deprecation:
+      deprecated_at: null
+      sunset_at: null
+
+  - id: rewire.beacon.send_whatsapp
+    name: "Send a WhatsApp message via CONNECT BSP"
+    description: |
+      Enqueue a WhatsApp business message via the CONNECT product (Rewire's
+      own WhatsApp BSP). Wraps `POST /v1/messages/whatsapp`: template
+      validation against Meta-approved templates synced from CONNECT,
+      E.164 validation, suppression check, CITADEL anchor.
+    version: "1.0.0"
+    category: dispatch
+    invoke:
+      transport: rest
+      endpoint: /agent/v1/invoke
+      schema:
+        input:
+          $schema: https://json-schema.org/draft/2020-12/schema
+          type: object
+          additionalProperties: false
+          required: [tenant_id, to, template_name, consent_basis]
+          properties:
+            tenant_id: { type: string, format: uuid }
+            to:
+              type: string
+              pattern: "^\\+[1-9]\\d{6,14}$"
+            template_name:
+              type: string
+              minLength: 1
+              maxLength: 128
+            template_vars:
+              type: object
+              additionalProperties: true
+            body_text:
+              type: string
+              maxLength: 4096
+            consent_basis:
+              type: string
+              enum: [consent, contract, legal_obligation, legitimate_interest]
+        output:
+          $schema: https://json-schema.org/draft/2020-12/schema
+          type: object
+          required: [message_id, status, chain_hash, provider_route]
+          properties:
+            message_id: { type: string }
+            status: { type: string, enum: [queued, sent, failed] }
+            chain_hash: { type: string }
+            provider_route: { type: string, enum: [connect_whatsapp, fallback] }
+    budget:
+      per_call_max_seconds: 8
+      per_call_tokens: 0
+    permissions:
+      requires_oauth: true
+      scopes: [beacon.messages.send]
+      requires_hitl: false
+      sensitivity: medium
+    audit:
+      emit_event: rewire.beacon.send_whatsapp.invoked
+    deprecation:
+      deprecated_at: null
+      sunset_at: null
+
+  - id: rewire.beacon.add_suppression
+    name: "Add a recipient to the cross-channel suppression list"
+    description: |
+      Add an identifier (email/phone) to the cross-channel suppression list
+      for a tenant. Idempotent on (tenant_id, identifier_type,
+      identifier_value). Returns suppression entry id + created_at.
+    version: "1.0.0"
+    category: compliance
+    invoke:
+      transport: rest
+      endpoint: /agent/v1/invoke
+      schema:
+        input:
+          $schema: https://json-schema.org/draft/2020-12/schema
+          type: object
+          additionalProperties: false
+          required: [tenant_id, identifier_type, identifier_value]
+          properties:
+            tenant_id: { type: string, format: uuid }
+            identifier_type:
+              type: string
+              enum: [email, phone, device_token, vapid_endpoint]
+            identifier_value:
+              type: string
+              minLength: 3
+              maxLength: 512
+            reason:
+              type: string
+              maxLength: 128
+              default: manual
+        output:
+          $schema: https://json-schema.org/draft/2020-12/schema
+          type: object
+          required: [id, identifier_type, identifier_value, created_at]
+          properties:
+            id: { type: string, format: uuid }
+            identifier_type: { type: string }
+            identifier_value: { type: string }
+            reason: { type: string }
+            created_at: { type: string, format: date-time }
+    budget:
+      per_call_max_seconds: 3
+      per_call_tokens: 0
+    permissions:
+      requires_oauth: true
+      scopes: [beacon.suppression.write]
+      requires_hitl: false
+      sensitivity: medium
+    audit:
+      emit_event: rewire.beacon.add_suppression.invoked
+    deprecation:
+      deprecated_at: null
+      sunset_at: null
+
+  - id: rewire.beacon.check_suppression
+    name: "Check if a recipient is suppressed (cross-channel)"
+    description: |
+      Check if an identifier is on the suppression list for a tenant.
+      Used by upstream agents (e.g. NOVA campaign planner) to short-circuit
+      sends. Read-only, latency-optimized (<2ms hot path).
+    version: "1.0.0"
+    category: compliance
+    invoke:
+      transport: rest
+      endpoint: /agent/v1/invoke
+      schema:
+        input:
+          $schema: https://json-schema.org/draft/2020-12/schema
+          type: object
+          additionalProperties: false
+          required: [tenant_id, identifier_type, identifier_value]
+          properties:
+            tenant_id: { type: string, format: uuid }
+            identifier_type:
+              type: string
+              enum: [email, phone, device_token, vapid_endpoint]
+            identifier_value:
+              type: string
+              minLength: 3
+              maxLength: 512
+        output:
+          $schema: https://json-schema.org/draft/2020-12/schema
+          type: object
+          required: [tenant_id, suppressed]
+          properties:
+            tenant_id: { type: string, format: uuid }
+            suppressed: { type: boolean }
+            reason: { type: string }
+            created_at: { type: string, format: date-time }
+    budget:
+      per_call_max_seconds: 2
+      per_call_tokens: 0
+    permissions:
+      requires_oauth: true
+      scopes: [beacon.suppression.read]
+      requires_hitl: false
+      sensitivity: low
+    audit:
+      emit_event: rewire.beacon.check_suppression.invoked
+    deprecation:
+      deprecated_at: null
+      sunset_at: null
+
+  - id: rewire.beacon.list_messages
+    name: "List recent messages for a tenant (event log)"
+    description: |
+      Returns the recent N messages dispatched by a tenant, filterable by
+      channel and status. Read-only, sources from ClickHouse beacon_events
+      MV with Redis 5min cache.
+    version: "1.0.0"
+    category: analytics
+    invoke:
+      transport: rest
+      endpoint: /agent/v1/invoke
+      schema:
+        input:
+          $schema: https://json-schema.org/draft/2020-12/schema
+          type: object
+          additionalProperties: false
+          required: [tenant_id]
+          properties:
+            tenant_id: { type: string, format: uuid }
+            channel:
+              type: string
+              enum: [email, sms, whatsapp, push_ios, push_android, push_web]
+            status:
+              type: string
+              enum: [sent, delivered, opened, clicked, bounced, complained, failed]
+            limit:
+              type: integer
+              minimum: 1
+              maximum: 1000
+              default: 100
+        output:
+          $schema: https://json-schema.org/draft/2020-12/schema
+          type: object
+          required: [tenant_id, count, messages]
+          properties:
+            tenant_id: { type: string, format: uuid }
+            count: { type: integer, minimum: 0 }
+            messages:
+              type: array
+              items:
+                type: object
+                required: [id, channel, recipient, status, sent_at]
+                properties:
+                  id: { type: string }
+                  channel: { type: string }
+                  recipient: { type: string }
+                  status: { type: string }
+                  sent_at: { type: string, format: date-time }
+                  chain_hash: { type: string }
+    budget:
+      per_call_max_seconds: 5
+      per_call_tokens: 0
+    permissions:
+      requires_oauth: true
+      scopes: [beacon.messages.read]
+      requires_hitl: false
+      sensitivity: low
+    audit:
+      emit_event: rewire.beacon.list_messages.invoked
+    deprecation:
+      deprecated_at: null
+      sunset_at: null
