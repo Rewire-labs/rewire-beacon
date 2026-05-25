@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from beacon.api import (
+    ab_tests,
     analytics,
     antispam,
     api_tokens,
@@ -16,6 +17,7 @@ from beacon.api import (
     messages,
     notifications,
     push_apps,
+    segments,
     suppression,
     templates,
     unsubscribe,
@@ -42,5 +44,8 @@ router.include_router(journeys.router)
 router.include_router(antispam.router)
 router.include_router(lgpd.router)
 router.include_router(billing.router)
+# MSG-IMPL-002 (Lote 8): A/B test + segmentação cross-canal umbrella.
+router.include_router(ab_tests.router)
+router.include_router(segments.router)
 
 __all__ = ["router"]
