@@ -19,11 +19,11 @@ frontend messaging-ui + backend Python email (Resend) + SMS + APNs/FCM + WhatsAp
 
 | ID | Titulo | Estimativa | Owner agente | Status |
 |---|---|---|---|---|
-| MSG-IMPL-001 | Frontend wiring (hooks, providers, error boundaries) | 1d | Sync Agent #2 ou Lote 8 sub-lote N | TODO |
-| MSG-IMPL-002 | Backend stubs (FastAPI/Go endpoints + migrations Alembic) | 1.5d | Lote 8 sub-lote N | TODO |
-| MSG-IMPL-003 | Tests (pytest unit + jest unit + smoke) | 0.5d | Lote 8 sub-lote N | TODO |
-| MSG-IMPL-004 | Helm chart + ArgoCD App + ExternalSecrets | 0.5d | Lote 8 sub-lote N | TODO |
-| MSG-IMPL-005 | Smoke tests + integracao cross-product | 0.5d | Lote 8 sub-lote N (final) | TODO |
+| MSG-IMPL-001 | Frontend wiring (hooks, providers, error boundaries) | 1d | Lote 8 Implementador rewire-messaging | DONE (lib/api.ts ampliado + useMessaging* hooks + 2 telas novas BeaconAbTests/BeaconSegments + rotas /ab-tests + /segments) |
+| MSG-IMPL-002 | Backend stubs (FastAPI/Go endpoints + migrations Alembic) | 1.5d | Lote 8 Implementador rewire-messaging | DONE (dispatcher umbrella /v1/notifications + /v1/channels + 2 novos routers /v1/ab-tests + /v1/segments; messages backend pre-existente preservado) |
+| MSG-IMPL-003 | Tests (pytest unit + jest unit + smoke) | 0.5d | Lote 8 Implementador rewire-messaging | DONE (21 tests novos green: 6 ab-tests + 5 segments + 6 dispatcher + 3 smoke + 1 healthz auth) |
+| MSG-IMPL-004 | Helm chart + ArgoCD App + ExternalSecrets | 0.5d | Lote 8 Implementador rewire-messaging | DONE-PRE-RECOVERY (helm lint clean + helm template render OK 508 lines + ApplicationSet entry confirmada; deploy real gated por recovery cluster runtime ADR 0110) |
+| MSG-IMPL-005 | Smoke tests + integracao cross-product | 0.5d | Lote 8 Implementador rewire-messaging | DONE-PRE-RECOVERY (smoke E2E local + scripts/smoke-tests/messaging/test_smoke.py 8 cluster smoke tests prontos para rodar pós-recovery) |
 
 ## Acceptance criteria global (todos tickets)
 

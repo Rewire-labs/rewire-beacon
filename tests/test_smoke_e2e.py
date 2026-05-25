@@ -40,6 +40,14 @@ def test_openapi_renders() -> None:
         assert "/v1/push-apps" in paths
         assert "/v1/webpush/sw.js" in paths
         assert "/v1/antispam/score" in paths
+        # MSG-IMPL-002 (Lote 8): umbrella endpoints A/B + segmentation.
+        assert "/v1/ab-tests" in paths
+        assert "/v1/ab-tests/{test_id}/assign" in paths
+        assert "/v1/ab-tests/{test_id}/results" in paths
+        assert "/v1/segments" in paths
+        assert "/v1/segments/{segment_id}/estimate" in paths
+        assert "/v1/notifications" in paths
+        assert "/v1/channels" in paths
 
 
 def test_healthz_metrics_independent_of_db() -> None:
