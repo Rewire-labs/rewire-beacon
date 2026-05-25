@@ -21,6 +21,9 @@ import BeaconChain from '@/pages/beacon/BeaconChain';
 import BeaconBilling from '@/pages/beacon/BeaconBilling';
 import BeaconTeam from '@/pages/beacon/BeaconTeam';
 import BeaconSettings from '@/pages/beacon/BeaconSettings';
+// MSG-IMPL-001 (Lote 8 umbrella): A/B tests + Segments (cross-canal).
+import BeaconAbTests from '@/pages/beacon/BeaconAbTests';
+import BeaconSegments from '@/pages/beacon/BeaconSegments';
 
 // BEACON — Notification Platform multi-canal BR.
 // Routes are mounted under /app/produtos/beacon/* so the Sidebar/Topbar
@@ -50,6 +53,8 @@ export default function App(): ReactElement {
         <Route path="billing" element={<BeaconBilling />} />
         <Route path="team" element={<BeaconTeam />} />
         <Route path="settings" element={<BeaconSettings />} />
+        <Route path="ab-tests" element={<BeaconAbTests />} />
+        <Route path="segments" element={<BeaconSegments />} />
       </Route>
       <Route path="*" element={<Navigate to="/app/produtos/beacon" replace />} />
     </Routes>

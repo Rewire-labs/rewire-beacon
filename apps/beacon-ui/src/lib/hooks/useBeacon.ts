@@ -338,3 +338,63 @@ export function useBeaconTeam() {
   });
   return envelope(q, (mock.TEAM ?? []) as unknown as Array<{ id: string; email: string; role: string }>);
 }
+
+// ----- MSG-IMPL-001 (Lote 8 — umbrella): A/B tests + segments + channels ----
+
+export function useMessagingAbTests() {
+  const q = useQuery({
+    queryKey: ["messaging-ab-tests"],
+    queryFn: () => api.abTests.list(),
+    retry: 1,
+    staleTime: 30_000,
+  });
+  return envelope(q, [] as api.AbTest[]);
+}
+
+export function useMessagingAbResults(testId: string | null | undefined) {
+  const q = useQuery({
+    queryKey: ["messaging-ab-results", testId],
+    queryFn: () => (testId ? api.abTests.results(testId) : Promise.reject(new Error("no test id"))),
+    enabled: Boolean(testId),
+    retry: 1,
+    staleTime: 15_000,
+  });
+  return envelope(q, {
+    test_id: testId ?? "",
+    name: "",
+    primary_metric: "clicked",
+    total_assignments: 0,
+    confidence: 0,
+    has_significant_winner: false,
+    variants: [] as api.AbVariantResult[],
+  } as api.AbResults);
+}
+
+export function useMessagingSegments() {
+  const q = useQuery({
+    queryKey: ["messaging-segments"],
+    queryFn: () => api.segments.list(),
+    retry: 1,
+    staleTime: 60_000,
+  });
+  return envelope(q, [] as api.Segment[]);
+}
+
+export function useMessagingChannels() {
+  const q = useQuery({
+    queryKey: ["messaging-channels"],
+    queryFn: () => api.notifications.channels(),
+    retry: 1,
+    staleTime: 5 * 60_000,
+  });
+  return envelope(q, {
+    organization_id: null,
+    channels: [
+      { id: "email", enabled: true, provider: "postal+ses-br+resend" },
+      { id: "sms", enabled: true, provider: "zenvia+totalvoice" },
+      { id: "whatsapp", enabled: true, provider: "connect-internal" },
+      { id: "push_mobile", enabled: true, provider: "apns+fcm" },
+      { id: "push_web", enabled: true, provider: "vapid" },
+    ],
+  });
+}

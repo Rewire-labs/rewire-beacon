@@ -246,3 +246,139 @@ export const antispam = {
       "/antispam/scores",
     ),
 };
+
+// ----- MSG-IMPL-002 (Lote 8): A/B tests + segments + notifications dispatcher
+
+export interface AbVariant {
+  id: string;
+  name: string;
+  weight: number;
+  template_slug: string;
+  subject_override?: string | null;
+}
+
+export interface AbTest {
+  id: string;
+  name: string;
+  channel: "email" | "sms" | "push" | "whatsapp";
+  status: string;
+  primary_metric: "delivered" | "opened" | "clicked" | "unsubscribed";
+  variants: AbVariant[];
+  created_at: string;
+}
+
+export interface AbAssignResponse {
+  test_id: string;
+  variant_id: string;
+  variant_name: string;
+  template_slug: string;
+  subject_override?: string | null;
+}
+
+export interface AbVariantResult {
+  variant_id: string;
+  name: string;
+  delivered: number;
+  opened: number;
+  clicked: number;
+  unsubscribed: number;
+  ctr: number;
+  is_winner: boolean;
+}
+
+export interface AbResults {
+  test_id: string;
+  name: string;
+  primary_metric: string;
+  total_assignments: number;
+  confidence: number;
+  has_significant_winner: boolean;
+  variants: AbVariantResult[];
+}
+
+export const abTests = {
+  list: () => api<AbTest[]>("/ab-tests"),
+  get: (id: string) => api<AbTest>(`/ab-tests/${id}`),
+  create: (body: {
+    name: string;
+    channel: AbTest["channel"];
+    variants: Array<Omit<AbVariant, "id">>;
+    audience_segment_id?: string | null;
+    primary_metric?: AbTest["primary_metric"];
+    min_sample_size?: number;
+  }) => api<AbTest>("/ab-tests", { method: "POST", body }),
+  assign: (id: string, recipient: string) =>
+    api<AbAssignResponse>(`/ab-tests/${id}/assign`, { method: "POST", body: { recipient } }),
+  recordEvent: (id: string, variant_id: string, event: AbVariantResult["name"] | string) =>
+    api<void>(`/ab-tests/${id}/event`, { method: "POST", body: { variant_id, event } }),
+  results: (id: string) => api<AbResults>(`/ab-tests/${id}/results`),
+};
+
+export interface Segment {
+  id: string;
+  name: string;
+  description: string | null;
+  channel: "email" | "sms" | "push" | "whatsapp" | "any";
+  attributes: Record<string, unknown>;
+  include_tags: string[];
+  exclude_tags: string[];
+  consent_basis: "consent" | "contract" | "legal_obligation" | "legitimate_interest";
+  estimated_size: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export const segments = {
+  list: () => api<Segment[]>("/segments"),
+  get: (id: string) => api<Segment>(`/segments/${id}`),
+  create: (body: {
+    name: string;
+    description?: string | null;
+    channel?: Segment["channel"];
+    attributes?: Record<string, unknown>;
+    include_tags?: string[];
+    exclude_tags?: string[];
+    consent_basis?: Segment["consent_basis"];
+  }) => api<Segment>("/segments", { method: "POST", body }),
+  update: (
+    id: string,
+    body: Partial<Pick<Segment, "name" | "description" | "attributes" | "include_tags" | "exclude_tags">>,
+  ) => api<Segment>(`/segments/${id}`, { method: "PATCH", body }),
+  remove: (id: string) => api<void>(`/segments/${id}`, { method: "DELETE" }),
+  estimate: (id: string) =>
+    api<{ segment_id: string; estimated_size: number; sample_recipients: string[]; computed_at: string }>(
+      `/segments/${id}/estimate`,
+      { method: "POST" },
+    ),
+};
+
+export interface NotificationCreateBody {
+  channel: "email" | "sms" | "whatsapp" | "push_mobile" | "push_web";
+  recipient: string;
+  template_id?: string;
+  body?: string;
+  subject?: string;
+  sender?: string;
+  consent_basis?: "consent" | "contract" | "legal_obligation" | "legitimate_interest";
+  metadata?: Record<string, string>;
+  push_title?: string;
+  push_app_id?: string;
+  template_vars?: Record<string, string>;
+}
+
+export interface NotificationAccepted {
+  notification_id: string;
+  status: string;
+  channel: string;
+  chain_hash: string;
+  provider_route: string;
+}
+
+export const notifications = {
+  send: (body: NotificationCreateBody) =>
+    api<NotificationAccepted>("/notifications", { method: "POST", body }),
+  channels: () =>
+    api<{ organization_id: string | null; channels: Array<{ id: string; enabled: boolean; provider: string }> }>(
+      "/channels",
+    ),
+};
