@@ -1,0 +1,97 @@
+"""POST /v1/sms — canonical SMS send endpoints (Zenvia BR primary)."""
+
+from __future__ import annotations
+
+import logging
+import re
+from typing import Any
+
+from fastapi import APIRouter, HTTPException, Request, status
+from pydantic import BaseModel, Field
+
+from messaging_cp.adapters.sms.router import SmsRouter, SmsRouterAllFailed
+from messaging_cp.credits_emit import emit_messaging_credit
+from messaging_cp.lago_emit import emit_messaging_billable
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/v1/sms")
+_sms_router = SmsRouter()
+
+# E.164-ish for BR (+55 + DDD + 8-9 digits).
+_BR_E164 = re.compile(r"^\+55\d{10,11}$")
+
+
+class SmsSendRequest(BaseModel):
+    to: str = Field(..., description="E.164 BR phone, e.g. +5511999998888")
+    text: str = Field(..., min_length=1, max_length=480)
+    from_number: str | None = None
+    template_id: str | None = None
+    consent_basis: str = Field(default="consent")
+    metadata: dict[str, str] = Field(default_factory=dict)
+
+
+class SmsSendResponse(BaseModel):
+    message_id: str
+    status: str
+    provider: str
+    cost_brl_cents: int
+
+
+def _tenant_id(request: Request) -> str:
+    tid = getattr(request.state, "organization_id", None) or getattr(
+        request.state, "tenant_id", None
+    )
+    if not tid:
+        raise HTTPException(status_code=400, detail="tenant_required")
+    return tid
+
+
+@router.post(
+    "",
+    status_code=status.HTTP_202_ACCEPTED,
+    response_model=SmsSendResponse,
+    summary="Send a transactional SMS (BR — Zenvia)",
+)
+async def send_sms(payload: SmsSendRequest, request: Request) -> SmsSendResponse:
+    if not _BR_E164.match(payload.to):
+        raise HTTPException(
+            status_code=422,
+            detail={"error": "invalid_recipient", "message": "phone must be E.164 BR (+55...)"},
+        )
+    tenant_id = _tenant_id(request)
+    try:
+        res = await _sms_router.send(
+            from_number=payload.from_number or "Rewire",
+            to=payload.to,
+            text=payload.text,
+        )
+    except SmsRouterAllFailed as exc:
+        logger.warning(
+            "messaging.sms.all_failed", extra={"tenant_id": tenant_id, "error": str(exc)}
+        )
+        raise HTTPException(status_code=502, detail={"error": "sms_all_providers_failed"})
+
+    await emit_messaging_credit(tenant_id=tenant_id, action_type="sms_br", quantity=1)
+    await emit_messaging_billable(
+        tenant_id=tenant_id,
+        metric="messaging_sms_sent",
+        value=1,
+        metadata={"provider": res.provider, "cost_brl_cents": res.cost_brl_cents},
+    )
+
+    return SmsSendResponse(
+        message_id=res.message_id,
+        status=res.status,
+        provider=res.provider,
+        cost_brl_cents=res.cost_brl_cents,
+    )
+
+
+@router.get("/{message_id}", summary="Get SMS delivery status")
+async def get_sms_status(message_id: str, request: Request) -> dict[str, Any]:
+    _tenant_id(request)
+    return {"message_id": message_id, "status": "unknown", "lookup": "not_implemented_v0"}
+
+
+__all__ = ["router"]

@@ -136,12 +136,30 @@ def create_app() -> FastAPI:
         return PlainTextResponse(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
     # Middleware order: outer-most added LAST. Wanted execution order on
-    # request: Auth -> Tenancy -> Idempotency -> handler.
+    # request: RED -> Auth -> Tenancy -> Idempotency -> handler.
+    # CORR-2 sweep (2026-05-26): RED middleware canonical para emit HTTP_REQUESTS_TOTAL
+    # + HTTP_REQUEST_DURATION_SECONDS auto-wired em cada request.
     app.add_middleware(IdempotencyMiddleware)
     app.add_middleware(TenancyMiddleware)
     app.add_middleware(AuthMiddleware)
+    try:
+        from .red_middleware import REDMiddleware
+        app.add_middleware(REDMiddleware)
+    except Exception:  # noqa: BLE001
+        pass
 
     app.include_router(api_router, prefix="/v1")
+
+    # MSG-V0 (Slot 4 Run 4): canonical /v1 surface (messaging_cp.api). Co-exists
+    # with legacy beacon.api routers above — same prefix, distinct routes.
+    # New consumers (rewire-app, rewire-admin) import via messaging_cp.* path.
+    try:
+        from messaging_cp.api import router as _msg_v1_router  # noqa: WPS433
+
+        app.include_router(_msg_v1_router)
+        logger.info("messaging.canonical_v1.mounted")
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("messaging.canonical_v1.mount_failed", error=str(exc))
 
     # BCN-CAP-01 + BCN-AICX-01 — canonical agent registry + invoke endpoints.
     # Lazy import so legacy tests/installer flows don't pay the YAML-load cost
@@ -151,6 +169,14 @@ def create_app() -> FastAPI:
 
     app.include_router(_capabilities_router)     # GET /api/v1/capabilities
     app.include_router(_agent_invoke_router)     # POST /agent/v1/invoke
+
+    # GAP-CLOSURE 2 (2026-05-25) — AUDIT-orchestrator-facing /internal/v1/dsar/*
+    try:
+        from beacon.api.internal_dsar import router as _internal_dsar_router
+
+        app.include_router(_internal_dsar_router, prefix="/internal/v1/dsar")
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("internal_dsar.router_wire_failed", error=str(exc))
 
     return app
 

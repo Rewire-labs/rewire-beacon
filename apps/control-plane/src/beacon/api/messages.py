@@ -4,6 +4,7 @@ Per BCN-024, BCN-053, BCN-063, BCN-082.
 """
 from __future__ import annotations
 
+import logging
 from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException, Request, status
@@ -25,6 +26,14 @@ from beacon.services.messaging import (
     enqueue_whatsapp,
 )
 
+# BUCKET 3 GAP-4 — IdempotencyMiddleware sentinel decorator.
+try:
+    from rewire_shared.http_client.idempotency import idempotent_required
+except Exception:  # pragma: no cover - older rewire-shared
+    def idempotent_required(func):  # type: ignore[misc]
+        return func
+
+_log = logging.getLogger(__name__)
 router = APIRouter(prefix="/messages", tags=["messages"])
 
 
@@ -57,8 +66,10 @@ def _require_org(request: Request) -> str:
 
 
 @router.post("/email", status_code=status.HTTP_202_ACCEPTED, response_model=EmailSendResponse)
+@idempotent_required
 async def send_email(payload: EmailSendBody, request: Request) -> EmailSendResponse:
     org_id = _require_org(request)
+    _log.info("messaging.email.send", extra={"org_id": org_id, "sender": payload.sender, "recipients": len(payload.to)})
     req = EmailMessageRequest(
         sender=payload.sender,
         to=[str(a) for a in payload.to],
@@ -110,8 +121,10 @@ class GenericSendResponse(BaseModel):
 
 
 @router.post("/sms", status_code=status.HTTP_202_ACCEPTED, response_model=GenericSendResponse)
+@idempotent_required
 async def send_sms(payload: SmsSendBody, request: Request) -> GenericSendResponse:
     org_id = _require_org(request)
+    _log.info("messaging.sms.send", extra={"org_id": org_id, "to": payload.to})
     req = SmsMessageRequest(
         to=payload.to,
         text=payload.text,
@@ -151,8 +164,10 @@ class PushSendBody(BaseModel):
 
 
 @router.post("/push", status_code=status.HTTP_202_ACCEPTED, response_model=GenericSendResponse)
+@idempotent_required
 async def send_push(payload: PushSendBody, request: Request) -> GenericSendResponse:
     org_id = _require_org(request)
+    _log.info("messaging.push.send", extra={"org_id": org_id, "platform": payload.platform})
     req = PushMessageRequest(
         device_token=payload.device_token,
         title=payload.title,
@@ -189,8 +204,10 @@ class WhatsAppSendBody(BaseModel):
 
 
 @router.post("/whatsapp", status_code=status.HTTP_202_ACCEPTED, response_model=GenericSendResponse)
+@idempotent_required
 async def send_whatsapp(payload: WhatsAppSendBody, request: Request) -> GenericSendResponse:
     org_id = _require_org(request)
+    _log.info("messaging.whatsapp.send", extra={"org_id": org_id, "to": payload.to, "template": payload.template_name})
     req = WhatsAppMessageRequest(
         to=payload.to,
         template_name=payload.template_name,

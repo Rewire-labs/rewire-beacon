@@ -59,6 +59,9 @@ class Settings(BaseSettings):
     ses_secret_access_key: str = ""
     zenvia_api_token: str = ""
     totalvoice_api_token: str = ""
+    # Resend fallback (Postal -> Resend on 5xx). Populated via ExternalSecret
+    # from kv/rewire-messaging/resend-api-key. Empty default = fallback disabled.
+    resend_api_key: str = ""
     apns_team_id: str = ""
     apns_key_id: str = ""
     fcm_service_account_json: str = ""

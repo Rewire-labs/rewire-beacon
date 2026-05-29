@@ -282,11 +282,17 @@ async def agent_invoke(
             return InvokeResponse.model_validate(cached)
 
         # 7. Dispatch handler.
+        # CORR-2 sweep (2026-05-26): zero 501 binário. Capability inexistente
+        # = 404 Not Found semantic (resource não existe), não 501 (endpoint exists).
         handler = get_handler(body.capability)
         if handler is None:
             raise HTTPException(
-                status_code=501,
-                detail=f"capability_not_implemented:{body.capability}",
+                status_code=404,
+                detail={
+                    "code": "capability_not_found",
+                    "capability": body.capability,
+                    "message": f"capability not registered in {THIS_SERVICE}",
+                },
             )
 
         ctx = HandlerContext(

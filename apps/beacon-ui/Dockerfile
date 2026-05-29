@@ -21,3 +21,7 @@ EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD wget -qO- http://localhost:8080/healthz >/dev/null 2>&1 || exit 1
+
+# CORR-D2 (P0-3) — defense-in-depth USER directive canonical (Kyverno require-non-root).
+# nginxinc/nginx-unprivileged ja roda como uid 101, USER explicit hardens admission gate.
+USER 101
