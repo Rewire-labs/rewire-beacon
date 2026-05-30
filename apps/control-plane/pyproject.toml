@@ -51,7 +51,10 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/beacon"]
+# RW-MESSAGING-08: include messaging_cp so canonical /v1 surface is present
+# in the shipped wheel (both beacon legacy routes + messaging_cp canonical
+# routes are mounted in main.py:156-162).
+packages = ["src/beacon", "src/messaging_cp"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
