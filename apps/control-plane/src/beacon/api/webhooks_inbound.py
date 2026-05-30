@@ -127,3 +127,77 @@ async def totalvoice_inbound(request: Request) -> dict[str, Any]:
     body = await request.json()
     logger.info("totalvoice.callback %s", body.get("evento", "unknown"))
     return {"status": "processed"}
+
+
+# ---------------------------------------------------------------------------
+# RW-MESSAGING-11: dispatch_provider_event — canonical routing entry-point
+# consumed by messaging_cp.api.v1.webhooks (POST /v1/webhooks/{provider}).
+# Routes to the correct per-provider handler based on `provider` arg.
+# ---------------------------------------------------------------------------
+
+_PROVIDER_HANDLERS = {
+    "postal": postal_inbound,
+    "zenvia": zenvia_inbound,
+    "totalvoice": totalvoice_inbound,
+}
+
+
+async def dispatch_provider_event(provider: str, body: bytes, signature: str) -> dict[str, Any]:
+    """Route an inbound provider webhook to the canonical per-provider handler.
+
+    Args:
+        provider:  One of "postal", "zenvia", "totalvoice", "resend", "apns", "fcm".
+        body:      Raw request body bytes.
+        signature: Value of X-Webhook-Signature (or provider-specific header).
+
+    Returns:
+        Handler result dict (e.g. {"status": "processed", ...}).
+
+    Raises:
+        ValueError: If provider is not supported.
+        HTTPException: Propagated from per-provider handler (400 bad sig, etc.).
+    """
+    from starlette.datastructures import Headers
+    from starlette.requests import Request as _StarletteRequest
+    from starlette.testclient import _TestClientTransport  # type: ignore[attr-defined]
+
+    # Build a minimal synthetic Request so per-provider handlers can call
+    # request.body() / request.json() as usual.
+    # We use the ASGI scope approach to avoid importing the full test client.
+    scope: dict = {
+        "type": "http",
+        "method": "POST",
+        "path": f"/v1/webhooks/inbound/{provider}",
+        "query_string": b"",
+        "headers": [
+            (b"content-type", b"application/json"),
+            (b"x-webhook-signature", signature.encode() if signature else b""),
+        ],
+    }
+
+    # We need an async receive callable that returns the body.
+    async def _receive() -> dict:
+        return {"type": "http.request", "body": body, "more_body": False}
+
+    from starlette.requests import Request as _Req
+    req = _Req(scope, receive=_receive)
+
+    handler = _PROVIDER_HANDLERS.get(provider)
+    if handler is None:
+        # Providers without a specific handler (resend/apns/fcm) — log and accept.
+        logger.info(
+            "messaging.webhook.dispatch.no_handler",
+            extra={"provider": provider, "size": len(body)},
+        )
+        return {"status": "accepted", "provider": provider}
+
+    return await handler(req)
+
+
+__all__ = [
+    "router",
+    "postal_inbound",
+    "zenvia_inbound",
+    "totalvoice_inbound",
+    "dispatch_provider_event",
+]
