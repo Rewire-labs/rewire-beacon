@@ -24,8 +24,20 @@ class LagoError(RuntimeError):
 
 class LagoClient:
     def __init__(self, *, base_url: str | None = None, api_key: str | None = None, timeout: float = 10.0) -> None:
-        self.base_url = (base_url or os.environ.get("BEACON_LAGO_BASE_URL") or "http://lago-api.lago.svc:3000").rstrip("/")
-        self.api_key = api_key or os.environ.get("BEACON_LAGO_API_KEY", "")
+        # RW-MESSAGING-09: prefer MESSAGING_LAGO_* (Helm ExternalSecret keys),
+        # fall back to BEACON_LAGO_* for legacy compat.
+        self.base_url = (
+            base_url
+            or os.environ.get("MESSAGING_LAGO_BASE_URL")
+            or os.environ.get("BEACON_LAGO_BASE_URL")
+            or "http://lago-api.lago.svc.cluster.local:3000"
+        ).rstrip("/")
+        self.api_key = (
+            api_key
+            or os.environ.get("MESSAGING_LAGO_API_KEY")
+            or os.environ.get("BEACON_LAGO_API_KEY")
+            or ""
+        )
         self._timeout = timeout
 
     def _headers(self) -> dict[str, str]:

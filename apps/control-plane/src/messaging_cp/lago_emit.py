@@ -30,11 +30,23 @@ VALID_METRICS = {
 
 
 def _lago_url() -> str:
-    return os.environ.get("LAGO_BASE_URL", "http://lago.lago.svc.cluster.local:3000").rstrip("/")
+    # RW-MESSAGING-09: read MESSAGING_LAGO_BASE_URL (Helm ExternalSecret key),
+    # fall back to LAGO_BASE_URL for backwards compat and bare env dev usage.
+    return (
+        os.environ.get("MESSAGING_LAGO_BASE_URL")
+        or os.environ.get("LAGO_BASE_URL")
+        or "http://lago-api.lago.svc.cluster.local:3000"
+    ).rstrip("/")
 
 
 def _lago_api_key() -> str:
-    return os.environ.get("LAGO_API_KEY", "")
+    # RW-MESSAGING-09: read MESSAGING_LAGO_API_KEY (Helm ExternalSecret key),
+    # fall back to LAGO_API_KEY for backwards compat.
+    return (
+        os.environ.get("MESSAGING_LAGO_API_KEY")
+        or os.environ.get("LAGO_API_KEY")
+        or ""
+    )
 
 
 async def emit_messaging_billable(
