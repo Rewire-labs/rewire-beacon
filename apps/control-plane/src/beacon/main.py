@@ -108,6 +108,35 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger.info("beacon.shutdown", service=s.service_name)
 
 
+def _wire_otel(app: FastAPI, service_name: str, otlp_endpoint: str) -> None:
+    """RW-MESSAGING-15: wire FastAPI + OTLP trace exporter.
+
+    Instruments the app so every request produces a span in Tempo/Jaeger.
+    No-op if the opentelemetry-instrumentation-fastapi package is absent
+    (dev environments without observability stack).
+    """
+    try:
+        from opentelemetry import trace
+        from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
+            OTLPSpanExporter,
+        )
+        from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+        from opentelemetry.sdk.resources import Resource
+        from opentelemetry.sdk.trace import TracerProvider
+        from opentelemetry.sdk.trace.export import BatchSpanProcessor
+
+        resource = Resource.create({"service.name": service_name, "product": "messaging"})
+        provider = TracerProvider(resource=resource)
+        if otlp_endpoint:
+            exporter = OTLPSpanExporter(endpoint=otlp_endpoint, insecure=True)
+            provider.add_span_processor(BatchSpanProcessor(exporter))
+        trace.set_tracer_provider(provider)
+        FastAPIInstrumentor.instrument_app(app)
+        logger.info("otel.fastapi.instrumented", service=service_name, otlp_endpoint=otlp_endpoint)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("otel.fastapi.instrument_failed", error=str(exc))
+
+
 def create_app() -> FastAPI:
     """FastAPI factory — used by uvicorn and tests."""
     s = get_settings()
@@ -121,6 +150,9 @@ def create_app() -> FastAPI:
         docs_url="/docs",
         redoc_url="/redoc",
     )
+
+    # RW-MESSAGING-15: wire OTel FastAPI instrumentation + OTLP exporter.
+    _wire_otel(app, s.otel_service_name, s.otel_exporter_otlp_endpoint)
 
     @app.get("/healthz", tags=["health"], include_in_schema=True)
     async def healthz() -> JSONResponse:

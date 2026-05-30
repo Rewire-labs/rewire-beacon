@@ -25,6 +25,8 @@ dependencies = [
   "opentelemetry-api>=1.25.0",
   "opentelemetry-sdk>=1.25.0",
   "opentelemetry-instrumentation-fastapi>=0.46b0",
+  # RW-MESSAGING-15: OTLP gRPC exporter for Tempo/Jaeger traces.
+  "opentelemetry-exporter-otlp-proto-grpc>=1.25.0",
   "redis>=5.0.0",
   "aiosqlite>=0.20.0",
   # BCN-CAP-01 + BCN-AICX-01: capability registry + agent invoke.
