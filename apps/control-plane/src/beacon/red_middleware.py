@@ -1,5 +1,10 @@
 """RED HTTP middleware — records http_requests_total + http_request_duration_seconds.
 
+RW-MESSAGING-06: fix label schema so PrometheusRule exprs match:
+  - added constant label `product="messaging"`
+  - renamed `status_code` -> `status` (aligned with PrometheusRule exprs
+    and cluster-wide metric convention).
+
 CORR-2 sweep (2026-05-26): canonical RED middleware adicionado para emit
 HTTP_REQUESTS_TOTAL + HTTP_REQUEST_DURATION_SECONDS auto-wired em cada request.
 Pattern matching FINOPS canonical RED middleware. Try/except fail-soft.
@@ -14,18 +19,23 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 from starlette.requests import Request
 from starlette.responses import Response
 
+# RW-MESSAGING-06: labels aligned with PrometheusRule exprs.
+# `product` constant label enables per-product aggregation in alerts.
+# `status` (not `status_code`) matches the filter in prometheusrule.yaml.
 HTTP_REQUESTS_TOTAL = Counter(
     "http_requests_total",
-    "Total HTTP requests served by messaging/beacon control-plane (RED).",
-    labelnames=("method", "endpoint", "status_code"),
+    "Total HTTP requests served by rewire-messaging control-plane (RED).",
+    labelnames=("method", "endpoint", "status", "product"),
 )
 
 HTTP_REQUEST_DURATION_SECONDS = Histogram(
     "http_request_duration_seconds",
     "HTTP request duration in seconds (RED).",
-    labelnames=("method", "endpoint"),
+    labelnames=("method", "endpoint", "product"),
     buckets=(0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0),
 )
+
+_PRODUCT = "messaging"
 
 
 class REDMiddleware(BaseHTTPMiddleware):
@@ -40,14 +50,14 @@ class REDMiddleware(BaseHTTPMiddleware):
 
         try:
             response = await call_next(request)
-            status_code = str(response.status_code)
+            status = str(response.status_code)
         except Exception:
             try:
                 HTTP_REQUESTS_TOTAL.labels(
-                    method=method, endpoint=endpoint, status_code="500"
+                    method=method, endpoint=endpoint, status="500", product=_PRODUCT
                 ).inc()
                 HTTP_REQUEST_DURATION_SECONDS.labels(
-                    method=method, endpoint=endpoint
+                    method=method, endpoint=endpoint, product=_PRODUCT
                 ).observe(time.perf_counter() - start)
             except Exception:  # noqa: BLE001
                 pass
@@ -55,10 +65,10 @@ class REDMiddleware(BaseHTTPMiddleware):
 
         try:
             HTTP_REQUESTS_TOTAL.labels(
-                method=method, endpoint=endpoint, status_code=status_code
+                method=method, endpoint=endpoint, status=status, product=_PRODUCT
             ).inc()
             HTTP_REQUEST_DURATION_SECONDS.labels(
-                method=method, endpoint=endpoint
+                method=method, endpoint=endpoint, product=_PRODUCT
             ).observe(time.perf_counter() - start)
         except Exception:  # noqa: BLE001
             pass
