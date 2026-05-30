@@ -4,9 +4,10 @@ import { CHAIN_ENTRIES } from "@/content/beacon-mock";
 import { useBeaconChain } from "@/lib/hooks/useBeacon";
 import { Link2, ShieldCheck, ExternalLink } from "lucide-react";
 
-// BCN-244: BeaconChain wired to /v1/chain via TanStack hook.
+// BCN-244 / FE-MESSAGING-06: render hook.data (falls back to mock).
 export default function BeaconChain() {
   const chainQ = useBeaconChain(50);
+  const entries = chainQ.data.entries as unknown as typeof CHAIN_ENTRIES;
   return (
     <PageContainer>
       {chainQ.isDemo && <DemoBanner detail="GET /v1/chain indisponivel (CITADEL link)" />}
@@ -34,7 +35,7 @@ export default function BeaconChain() {
       <Table>
         <thead><tr><Th>Quando</Th><Th>Actor</Th><Th>Ação</Th><Th>Target</Th><Th>Hash</Th></tr></thead>
         <tbody>
-          {CHAIN_ENTRIES.map((c) => (
+          {entries.map((c) => (
             <tr key={c.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-900/40">
               <Td className="text-xs text-zinc-500">{timeAgo(c.ts)}</Td>
               <Td className="font-mono text-xs">{c.actor}</Td>

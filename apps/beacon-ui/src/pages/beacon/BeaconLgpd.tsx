@@ -9,10 +9,13 @@ import { lgpd } from "@/lib/api";
 const TYPE_LABEL = { access: "Acesso", deletion: "Exclusão", portability: "Portabilidade" };
 const STATUS_TONE = { received: "warn" as const, in_progress: "warn" as const, fulfilled: "ok" as const };
 
-// BCN-242: BeaconLgpd wired to /v1/audit/lgpd/dsar via TanStack hook.
+// BCN-242 / FE-MESSAGING-06: render hook.data (falls back to mock when isDemo).
 export default function BeaconLgpd() {
   const lgpdQ = useBeaconLgpd();
-  const pending = DSAR_REQUESTS.filter((d) => d.status !== "fulfilled").length;
+  // Use fetched data when available; lgpdQ.data.dsars is populated by the hook
+  // (with mock fallback when backend unreachable).
+  const dsars = lgpdQ.data.dsars as typeof DSAR_REQUESTS;
+  const pending = dsars.filter((d) => d.status !== "fulfilled").length;
   const [creating, setCreating] = useState(false);
   const [email, setEmail] = useState("");
   const [result, setResult] = useState<string | null>(null);
@@ -71,7 +74,7 @@ export default function BeaconLgpd() {
       <Table>
         <thead><tr><Th>Status</Th><Th>Titular</Th><Th>Tipo</Th><Th>Mensagens encontradas</Th><Th>Recebido</Th><Th>Deadline ANPD</Th></tr></thead>
         <tbody>
-          {DSAR_REQUESTS.map((d) => (
+          {dsars.map((d) => (
             <tr key={d.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-900/40">
               <Td><Badge tone={STATUS_TONE[d.status]}>{d.status}</Badge></Td>
               <Td className="font-mono text-xs flex items-center gap-2"><FileCheck size={12} className="text-zinc-400" />{d.identifier}</Td>

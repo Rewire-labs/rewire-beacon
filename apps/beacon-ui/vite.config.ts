@@ -16,12 +16,11 @@ export default defineConfig({
     strictPort: true,
     host: '0.0.0.0',
     proxy: {
-      '/api': {
-        // V0: route /api/* requests through installer-backend-proxy
-        // which fans out to beacon-control-plane internally.
+      '/v1': {
+        // FE-MESSAGING-05: proxy /v1/* to the control-plane in local dev.
+        // Set VITE_MESSAGING_URL (empty string = use proxy) or override target.
         target: process.env.VITE_API_URL ?? 'http://localhost:8030',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, '/beacon/v1'),
       },
     },
   },
