@@ -78,10 +78,11 @@ class RetryWorker:
     async def _read_one(self) -> dict[str, Any] | None:
         if self._db is None:
             return None
+        # RW-MESSAGING-22: asyncpg uses $1-positional params.
         async with self._db.acquire() as conn:  # type: ignore[union-attr]
             row = await conn.fetchrow(
-                "SELECT msg_id, message FROM pgmq.read(:queue, 30, 1) LIMIT 1",
-                queue=PGMQ_DLQ,
+                "SELECT msg_id, message FROM pgmq.read($1::text, 30::int, 1::int) LIMIT 1",
+                PGMQ_DLQ,
             )
         if row is None:
             return None
@@ -93,9 +94,10 @@ class RetryWorker:
     async def _archive(self, msg_id: int) -> None:
         if self._db is None:
             return
+        # RW-MESSAGING-22: positional params for asyncpg.
         async with self._db.acquire() as conn:  # type: ignore[union-attr]
             await conn.execute(
-                "SELECT pgmq.archive(:queue, :msg_id)", queue=PGMQ_DLQ, msg_id=msg_id
+                "SELECT pgmq.archive($1::text, $2::bigint)", PGMQ_DLQ, msg_id
             )
 
     async def _requeue(self, channel: str, payload: dict[str, Any], retries: int) -> None:
@@ -108,12 +110,13 @@ class RetryWorker:
         if target_queue is None:
             self.stats.permanent_fail += 1
             return
+        # RW-MESSAGING-22: positional params for asyncpg; $3 = delay seconds (int).
         async with self._db.acquire() as conn:  # type: ignore[union-attr]
             await conn.execute(
-                "SELECT pgmq.send(:queue, :msg::jsonb, :delay)",
-                queue=target_queue,
-                msg=json.dumps(new_payload),
-                delay=delay_seconds,
+                "SELECT pgmq.send($1::text, $2::jsonb, $3::int)",
+                target_queue,
+                json.dumps(new_payload),
+                delay_seconds,
             )
         self.stats.requeued += 1
 

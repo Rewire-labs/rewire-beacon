@@ -127,15 +127,19 @@ class SenderWorker:
         Returns the message envelope or ``None`` if the queue is empty.
         The pgmq Python binding (or raw SQL) is the actual call site —
         for testability this method is dependency-injection friendly.
+
+        RW-MESSAGING-22: asyncpg uses $1-positional params; `:name` syntax
+        only works with SQLAlchemy text().bindparams() — switch to positional.
         """
         if self._db is None:
             return None
+        # asyncpg positional: $1 = queue name (text), $2 = vt (int), $3 = count (int)
         sql = (
-            "SELECT msg_id, message FROM pgmq.read(:queue, :vt, 1) "
+            "SELECT msg_id, message FROM pgmq.read($1::text, $2::int, $3::int) "
             "ORDER BY msg_id LIMIT 1"
         )
         async with self._db.acquire() as conn:  # type: ignore[union-attr]
-            row = await conn.fetchrow(sql, queue=self.queue_name, vt=self._vt)
+            row = await conn.fetchrow(sql, self.queue_name, self._vt, 1)
         if row is None:
             return None
         payload = row["message"]
@@ -146,8 +150,9 @@ class SenderWorker:
     async def _archive(self, msg_id: int) -> None:
         if self._db is None:
             return
+        # RW-MESSAGING-22: positional params for asyncpg.
         async with self._db.acquire() as conn:  # type: ignore[union-attr]
-            await conn.execute("SELECT pgmq.archive(:queue, :msg_id)", queue=self.queue_name, msg_id=msg_id)
+            await conn.execute("SELECT pgmq.archive($1::text, $2::bigint)", self.queue_name, msg_id)
 
     async def _send_to_dlq(self, payload: dict[str, Any], error: str) -> None:
         if self._db is None:
@@ -158,11 +163,12 @@ class SenderWorker:
             "_dlq_channel": self.channel,
             "_dlq_at": int(time.time()),
         }
+        # RW-MESSAGING-22: positional params for asyncpg.
         async with self._db.acquire() as conn:  # type: ignore[union-attr]
             await conn.execute(
-                "SELECT pgmq.send(:queue, :msg::jsonb)",
-                queue=PGMQ_DLQ,
-                msg=json.dumps(dlq_msg),
+                "SELECT pgmq.send($1::text, $2::jsonb)",
+                PGMQ_DLQ,
+                json.dumps(dlq_msg),
             )
         self.stats.dlq += 1
 
