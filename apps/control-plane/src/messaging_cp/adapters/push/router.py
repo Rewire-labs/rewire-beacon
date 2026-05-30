@@ -9,16 +9,18 @@ to keep per-provider failure/CB metrics decoupled.
 from __future__ import annotations
 
 import logging
-import time
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+from messaging_cp.adapters._circuit import ProviderCircuit  # RW-MESSAGING-23
 from messaging_cp.adapters.push.apns import ApnsAdapter, ApnsAdapterError
 from messaging_cp.adapters.push.fcm import FcmAdapter, FcmAdapterError
 
 logger = logging.getLogger(__name__)
 
 Platform = Literal["ios", "android", "web"]
+
+_Circuit = ProviderCircuit  # backward compat alias
 
 
 class PushRouterError(RuntimeError):
@@ -27,33 +29,6 @@ class PushRouterError(RuntimeError):
 
 class PushRouterCircuitOpen(PushRouterError):
     """Raised when the provider for a given platform is circuit-open."""
-
-
-@dataclass(slots=True)
-class _Circuit:
-    failure_threshold: int = 3
-    reset_after_seconds: float = 30.0
-    _failures: int = 0
-    _opened_at: float = 0.0
-    _state: str = "closed"
-
-    def is_open(self) -> bool:
-        if self._state != "open":
-            return False
-        if time.monotonic() - self._opened_at >= self.reset_after_seconds:
-            self._state = "half_open"
-            return False
-        return True
-
-    def record_success(self) -> None:
-        self._failures = 0
-        self._state = "closed"
-
-    def record_failure(self) -> None:
-        self._failures += 1
-        if self._failures >= self.failure_threshold:
-            self._state = "open"
-            self._opened_at = time.monotonic()
 
 
 @dataclass(slots=True)
@@ -82,11 +57,11 @@ class PushRouter:
     ) -> None:
         self._apns = apns or ApnsAdapter()
         self._fcm = fcm or FcmAdapter()
-        self._cb_apns = _Circuit(
+        self._cb_apns = ProviderCircuit(
             failure_threshold=cb_failure_threshold,
             reset_after_seconds=cb_reset_seconds,
         )
-        self._cb_fcm = _Circuit(
+        self._cb_fcm = ProviderCircuit(
             failure_threshold=cb_failure_threshold,
             reset_after_seconds=cb_reset_seconds,
         )

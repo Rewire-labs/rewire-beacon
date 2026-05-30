@@ -18,50 +18,21 @@ the underlying HTTP call.
 from __future__ import annotations
 
 import logging
-import time
 from dataclasses import dataclass, field
 from typing import Any
 
+from messaging_cp.adapters._circuit import ProviderCircuit  # RW-MESSAGING-23
 from messaging_cp.adapters.email.postal import PostalAdapter, PostalAdapterError
 from messaging_cp.adapters.email.resend import ResendAdapter, ResendAdapterError
 
 logger = logging.getLogger(__name__)
 
+# backward compat alias for tests that used _Circuit directly
+_Circuit = ProviderCircuit
+
 
 class EmailRouterAllFailed(RuntimeError):
     """Raised when every provider in the router fails."""
-
-
-@dataclass(slots=True)
-class _Circuit:
-    """Lightweight per-provider circuit breaker.
-
-    States: ``closed`` (normal), ``open`` (skip), ``half_open`` (probe one).
-    """
-
-    failure_threshold: int = 3
-    reset_after_seconds: float = 30.0
-    _failures: int = 0
-    _opened_at: float = 0.0
-    _state: str = "closed"
-
-    def is_open(self) -> bool:
-        if self._state != "open":
-            return False
-        if time.monotonic() - self._opened_at >= self.reset_after_seconds:
-            self._state = "half_open"
-            return False
-        return True
-
-    def record_success(self) -> None:
-        self._failures = 0
-        self._state = "closed"
-
-    def record_failure(self) -> None:
-        self._failures += 1
-        if self._failures >= self.failure_threshold:
-            self._state = "open"
-            self._opened_at = time.monotonic()
 
 
 @dataclass(slots=True)
@@ -90,11 +61,11 @@ class EmailRouter:
     ) -> None:
         self._postal = postal or PostalAdapter()
         self._resend = resend or ResendAdapter()
-        self._cb_postal = _Circuit(
+        self._cb_postal = ProviderCircuit(
             failure_threshold=cb_failure_threshold,
             reset_after_seconds=cb_reset_seconds,
         )
-        self._cb_resend = _Circuit(
+        self._cb_resend = ProviderCircuit(
             failure_threshold=cb_failure_threshold,
             reset_after_seconds=cb_reset_seconds,
         )

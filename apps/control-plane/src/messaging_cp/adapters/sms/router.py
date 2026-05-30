@@ -7,44 +7,19 @@ same circuit-breaker pattern as the email router.
 from __future__ import annotations
 
 import logging
-import time
 from dataclasses import dataclass, field
 from typing import Any
 
+from messaging_cp.adapters._circuit import ProviderCircuit  # RW-MESSAGING-23
 from messaging_cp.adapters.sms.zenvia import ZenviaAdapter, ZenviaAdapterError
 
 logger = logging.getLogger(__name__)
 
+_Circuit = ProviderCircuit  # backward compat alias
+
 
 class SmsRouterAllFailed(RuntimeError):
     pass
-
-
-@dataclass(slots=True)
-class _Circuit:
-    failure_threshold: int = 3
-    reset_after_seconds: float = 30.0
-    _failures: int = 0
-    _opened_at: float = 0.0
-    _state: str = "closed"
-
-    def is_open(self) -> bool:
-        if self._state != "open":
-            return False
-        if time.monotonic() - self._opened_at >= self.reset_after_seconds:
-            self._state = "half_open"
-            return False
-        return True
-
-    def record_success(self) -> None:
-        self._failures = 0
-        self._state = "closed"
-
-    def record_failure(self) -> None:
-        self._failures += 1
-        if self._failures >= self.failure_threshold:
-            self._state = "open"
-            self._opened_at = time.monotonic()
 
 
 @dataclass(slots=True)
@@ -67,7 +42,7 @@ class SmsRouter:
         cb_reset_seconds: float = 30.0,
     ) -> None:
         self._zenvia = zenvia or ZenviaAdapter()
-        self._cb_zenvia = _Circuit(
+        self._cb_zenvia = ProviderCircuit(
             failure_threshold=cb_failure_threshold,
             reset_after_seconds=cb_reset_seconds,
         )
