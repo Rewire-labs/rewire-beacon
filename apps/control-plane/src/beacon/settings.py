@@ -1,8 +1,14 @@
 """BEACON canonical settings — Pydantic Settings.
 
-Canonical env var prefix: BEACON_*. Inheriting from common Rewire patterns
-(rewire-admin, rewire-notify). All values have V0 defaults so the app can
-boot locally without external services.
+Canonical env var prefix: MESSAGING_* (aligned with Helm chart + ExternalSecrets).
+All MESSAGING_* env vars injected by Helm ExternalSecrets (kv/rewire-messaging/*)
+are read without the prefix stripped — pydantic strips the prefix automatically.
+
+V0 defaults allow local dev without external services; in-cluster the Helm
+ExternalSecret populates the secrets.
+
+NOTE: Previously the prefix was BEACON_* which was mismatched from Helm
+(RW-MESSAGING-01 fix).
 """
 
 from __future__ import annotations
@@ -17,14 +23,14 @@ class Settings(BaseSettings):
     """Runtime configuration for BEACON control-plane."""
 
     model_config = SettingsConfigDict(
-        env_prefix="BEACON_",
+        env_prefix="MESSAGING_",
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
     )
 
     # -- service identity -------------------------------------------------
-    service_name: str = "rewire-beacon"
+    service_name: str = "rewire-messaging"
     service_version: str = "0.1.0"
     environment: str = Field(default="dev", description="dev | staging | prod")
     log_level: str = "INFO"
@@ -42,14 +48,14 @@ class Settings(BaseSettings):
 
     # -- Identity / security ---------------------------------------------
     vault_addr: str = "http://vault.security.svc.cluster.local:8200"
-    oidc_issuer: str = "https://auth.rewirelabs.dev/application/o/beacon/"
-    oidc_client_id: str = "beacon"
+    oidc_issuer: str = "https://auth.rewirelabs.dev/application/o/messaging/"
+    oidc_client_id: str = "messaging"
     oidc_client_secret: str = "dev-only-not-prod"  # noqa: S105 — dev fallback
     # JWKS endpoint for RS256 signature validation (ADR0046). Empty default ->
     # derived from oidc_issuer via well-known discovery suffix.
     oidc_jwks_uri: str = ""
     # Expected `aud` claim for UI/SDK tokens (Authentik client_id by default).
-    oidc_audience: str = "beacon"
+    oidc_audience: str = "messaging"
     # Dev/test ONLY: shared HS256 secret to accept symmetric tokens without a
     # live Authentik/JWKS. MUST be empty in prod (ExternalSecret never sets it).
     oidc_dev_hs256_secret: str = ""
@@ -88,7 +94,7 @@ class Settings(BaseSettings):
     otel_exporter_otlp_endpoint: str = (
         "http://otel-collector.observability.svc.cluster.local:4317"
     )
-    otel_service_name: str = "rewire-beacon"
+    otel_service_name: str = "rewire-messaging"
 
 
 @lru_cache(maxsize=1)
