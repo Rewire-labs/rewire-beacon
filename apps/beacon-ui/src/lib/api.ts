@@ -287,5 +287,83 @@ export const api = {
   del: <T>(path: string) => apiFetch<T>(path, { method: "DELETE" }),
 };
 
+// --------------------------------------------------------------------------- //
+// Typed resource clients (FE-MESSAGING-07) — each maps to a real backend
+// router under /v1, replacing the previous FE-invented endpoints.
+// --------------------------------------------------------------------------- //
+export interface ChannelStat {
+  channel: string;
+  sent: number;
+  delivered: number;
+  failed: number;
+}
+export interface Overview {
+  period: string;
+  total_sent: number;
+  total_delivered: number;
+  total_failed: number;
+  delivery_rate: number;
+  channels: ChannelStat[];
+}
+export interface SmsNumber {
+  id: string;
+  phone_number: string;
+  label: string;
+  provider: string;
+  verified: boolean;
+}
+export interface Deliverability {
+  bounce_rate: number;
+  complaint_rate: number;
+  open_rate: number;
+  click_rate: number;
+  reputation_score: number;
+}
+export interface ChainStatus {
+  length: number;
+  head_hash: string;
+  verified: boolean;
+  last_verified_at: string | null;
+}
+export interface TeamMember {
+  id: string;
+  email: string;
+  role: string;
+}
+export interface WorkspaceSettings {
+  workspace_name: string;
+  default_locale: string;
+  timezone: string;
+  quiet_hours_start: string | null;
+  quiet_hours_end: string | null;
+  rate_limit_per_minute: number;
+}
+
+export const beaconApi = {
+  overview: (period = "7d") =>
+    api.get<Overview>("/v1/overview", { period }),
+  smsNumbers: {
+    list: () => api.get<SmsNumber[]>("/v1/sms-numbers"),
+    create: (body: { phone_number: string; label?: string; provider?: string }) =>
+      api.post<SmsNumber>("/v1/sms-numbers", body),
+  },
+  deliverability: (period = "30d") =>
+    api.get<Deliverability>("/v1/deliverability", { period }),
+  chain: {
+    status: () => api.get<ChainStatus>("/v1/chain"),
+    verify: () => api.post<ChainStatus>("/v1/chain/verify"),
+  },
+  team: {
+    list: () => api.get<TeamMember[]>("/v1/team"),
+    invite: (body: { email: string; role?: string }) =>
+      api.post<TeamMember>("/v1/team/invite", body),
+  },
+  settings: {
+    get: () => api.get<WorkspaceSettings>("/v1/settings"),
+    update: (body: WorkspaceSettings) =>
+      api.put<WorkspaceSettings>("/v1/settings", body),
+  },
+};
+
 // Silence "unused" on the ambient declaration in environments without Vite.
 void importMetaEnv;

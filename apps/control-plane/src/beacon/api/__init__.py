@@ -1,51 +1,31 @@
-"""BEACON HTTP API routers (V0 stubs)."""
+# beacon api package
+"""Aggregates the FastAPI routers for the Beacon control-plane.
+
+FE-MESSAGING-07 added the 6 previously FE-invented endpoints
+(overview / sms-numbers / deliverability / chain / team / settings) so the
+beacon-ui pages hit a real backend contract instead of silent 404s.
+"""
 
 from __future__ import annotations
 
 from fastapi import APIRouter
 
-from beacon.api import (
-    ab_tests,
-    analytics,
-    antispam,
-    api_tokens,
-    billing,
-    deliveries,
-    domains,
-    journeys,
-    lgpd,
-    messages,
-    notifications,
-    push_apps,
-    segments,
-    suppression,
-    templates,
-    unsubscribe,
-    webhooks,
-    webhooks_inbound,
-    webpush_subs,
+from . import (
+    chain,
+    deliverability,
+    overview,
+    settings,
+    sms_numbers,
+    team,
 )
 
-router = APIRouter()
-router.include_router(notifications.router, tags=["notifications"])
-router.include_router(templates.router, tags=["templates"])
-router.include_router(deliveries.router, tags=["deliveries"])
-router.include_router(webhooks.router, tags=["webhooks"])
-router.include_router(api_tokens.router)
-router.include_router(messages.router)
-router.include_router(domains.router)
-router.include_router(suppression.router)
-router.include_router(unsubscribe.router)
-router.include_router(webhooks_inbound.router)
-router.include_router(push_apps.router)
-router.include_router(webpush_subs.router)
-router.include_router(analytics.router)
-router.include_router(journeys.router)
-router.include_router(antispam.router)
-router.include_router(lgpd.router)
-router.include_router(billing.router)
-# MSG-IMPL-002 (Lote 8): A/B test + segmentação cross-canal umbrella.
-router.include_router(ab_tests.router)
-router.include_router(segments.router)
+# Single aggregated router mounted by the app under /v1.
+api_router = APIRouter()
+api_router.include_router(overview.router)
+api_router.include_router(sms_numbers.router)
+api_router.include_router(deliverability.router)
+api_router.include_router(chain.router)
+api_router.include_router(team.router)
+api_router.include_router(settings.router)
 
-__all__ = ["router"]
+__all__ = ["api_router"]
