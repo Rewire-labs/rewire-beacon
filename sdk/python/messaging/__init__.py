@@ -9,8 +9,8 @@ Usage::
 
     client = Client(
         base_url="https://messaging.rewirelabs.dev",
-        api_token="bcn_live_...",
-        tenant_id="org_xxx",
+        api_token="<YOUR_API_TOKEN>",   # RW-XS-SECRETS-09: no baked default
+        tenant_id="<YOUR_ORG_ID>",
     )
 
     resp = await client.send_email(

@@ -1,8 +1,8 @@
 {
-  "name": "rewire-beacon-ui",
+  "name": "rewire-messaging-ui",
   "version": "0.0.1",
   "private": true,
-  "description": "BEACON UI — Notification Platform multi-canal BR (Vite + React 19 + TypeScript)",
+  "description": "rewire-messaging UI — Notification Platform multi-canal BR (Vite + React 19 + TypeScript)",
   "type": "module",
   "scripts": {
     "dev": "vite",
