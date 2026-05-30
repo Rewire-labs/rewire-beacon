@@ -29,6 +29,7 @@ SupportedProvider = Literal["postal", "resend", "zenvia", "apns", "fcm"]
 @router.post(
     "/{provider}",
     status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
     summary="Inbound webhook from an upstream provider",
 )
 async def inbound_webhook(provider: str, request: Request) -> None:

@@ -101,6 +101,7 @@ async def list_templates(request: Request) -> list[TemplateOut]:
 @router.delete(
     "/{template_id}",
     status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
     summary="Delete a template",
 )
 async def delete_template(template_id: str, request: Request) -> None:

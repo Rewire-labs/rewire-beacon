@@ -57,6 +57,10 @@ class Settings(BaseSettings):
     # -- Inter-agent (INTER_AGENT_COMM_SPEC §1.2) -------------------------
     agent_audience: str = "agents.rewire.svc"
     agent_jwks_uri: str = ""
+    # Dev/test ONLY: when true, /agent/v1/invoke accepts header-only identity
+    # (no verified JWT). MUST be false in prod — the header-trust path was the
+    # RW-MESSAGING-07 auth bypass.
+    agent_invoke_dev_allow_unsigned: bool = False
 
     # -- Cross-product ----------------------------------------------------
     connect_internal_base_url: str = "http://connect.connect.svc.cluster.local:8080"

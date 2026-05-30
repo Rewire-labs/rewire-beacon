@@ -81,7 +81,9 @@ addopts = [
     "--strict-config",
 ]
 testpaths = ["tests", "apps/control-plane/tests"]
+pythonpath = ["apps/control-plane/src"]
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 markers = [
     "unit: pure unit tests",
     "integration: integration tests",

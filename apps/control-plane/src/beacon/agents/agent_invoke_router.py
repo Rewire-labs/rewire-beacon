@@ -40,7 +40,12 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/agent/v1", tags=["agent-invoke"])
 
-THIS_SERVICE = "rewire-beacon"
+# Canonical service slug. The legacy ``rewire-beacon`` alias is still accepted
+# as an ``X-Rewire-Agent-Dst`` for a 90d migration window (callers keyed on the
+# old name during the rename — see RW-MESSAGING-10).
+THIS_SERVICE = "rewire-messaging"
+_LEGACY_SERVICE_ALIAS = "rewire-beacon"
+_ACCEPTED_DST = frozenset({THIS_SERVICE, _LEGACY_SERVICE_ALIAS})
 
 # In-memory idempotency cache fallback (TTL ~24h). Cleared on process
 # restart. Production wires this to Redis via the existing
@@ -182,20 +187,46 @@ async def agent_invoke(
             _span.set_attribute("rewire.tenant.id", x_rewire_tenant_id)
             _span.set_attribute("rewire.capability", body.capability)
 
-        # 1. JWT validation — relies on AuthMiddleware to already have set
-        #    request.state.claims; if absent we 401 unless smoke-mode.
-        claims = getattr(request.state, "claims", None)
-        if claims is None and not getattr(request.state, "is_agent_invoke", False):
-            # Smoke envs bypass AuthMiddleware; only allow if header
-            # ``X-Rewire-Agent-Src`` is non-empty AND tenant is ``global``.
+        # 1. JWT validation — the agent token MUST carry a valid signature
+        #    (audience ``agents.rewire.svc``). ``/agent/v1/`` bypasses the UI
+        #    AuthMiddleware, so we validate here. Header-only identity is
+        #    rejected unless an explicit dev flag is set (the RW-MESSAGING-07
+        #    header-trust bypass is gone).
+        from beacon.middleware.auth import get_agent_jwt_validator
+        from beacon.settings import get_settings as _get_settings
+
+        _settings = _get_settings()
+        agent_claims: dict[str, Any] | None = None
+        auth_header = request.headers.get("Authorization", "")
+        token = ""
+        if auth_header.lower().startswith("bearer "):
+            token = auth_header.split(" ", 1)[1].strip()
+
+        if token:
+            try:
+                agent_claims = await get_agent_jwt_validator(_settings).validate_payload(
+                    token
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.info("agent_invoke.jwt_invalid", extra={"err": str(exc)})
+                raise HTTPException(
+                    status_code=401, detail="invalid_agent_jwt"
+                ) from exc
+        elif _settings.agent_invoke_dev_allow_unsigned:
+            # Dev/test only: header-derived identity (MUST be false in prod).
             if not x_rewire_agent_src:
                 raise HTTPException(status_code=401, detail="missing_agent_jwt")
+        else:
+            raise HTTPException(status_code=401, detail="missing_agent_jwt")
+
+        # Actor is the verified token ``sub`` when present; the header is only
+        # an identity hint for the dev-unsigned path.
         actor_sub = (
-            getattr(claims, "sub", None) if claims else x_rewire_agent_src
+            agent_claims.get("sub") if agent_claims else x_rewire_agent_src
         )
 
-        # 2. Agent-Dst mismatch.
-        if x_rewire_agent_dst and x_rewire_agent_dst != THIS_SERVICE:
+        # 2. Agent-Dst mismatch (canonical slug + 90d legacy alias accepted).
+        if x_rewire_agent_dst and x_rewire_agent_dst not in _ACCEPTED_DST:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=(

@@ -18,6 +18,10 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 os.environ.setdefault(
     "BEACON_CAPABILITIES_PATH", str(_REPO_ROOT / "capabilities.yaml")
 )
+# These tests exercise the invoke *pipeline* with header-derived identity. The
+# header-trust path is now opt-in via the dev flag (RW-MESSAGING-07); prod
+# leaves it false. Dedicated security tests below assert the flag-off behaviour.
+os.environ.setdefault("BEACON_AGENT_INVOKE_DEV_ALLOW_UNSIGNED", "true")
 
 
 @pytest.fixture(autouse=True)

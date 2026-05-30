@@ -108,9 +108,41 @@ def _get_jwt_validator(settings: Settings) -> Any:
 
 def _reset_jwt_validator() -> None:
     """Test hook: drop the cached validator so new settings take effect."""
-    global _VALIDATOR, _VALIDATOR_KEY
+    global _VALIDATOR, _VALIDATOR_KEY, _AGENT_VALIDATOR, _AGENT_VALIDATOR_KEY
     _VALIDATOR = None
     _VALIDATOR_KEY = None
+    _AGENT_VALIDATOR = None
+    _AGENT_VALIDATOR_KEY = None
+
+
+_AGENT_VALIDATOR: Any = None
+_AGENT_VALIDATOR_KEY: tuple[str, str, str, str] | None = None
+
+
+def get_agent_jwt_validator(settings: Settings) -> Any:
+    """Validator for inter-agent tokens (INTER_AGENT_COMM_SPEC §1.2).
+
+    Same JWKS machinery as the UI/SDK validator but pinned to the agent
+    audience (``agents.rewire.svc`` by default). Used by ``/agent/v1/invoke``
+    so the endpoint enforces a real signature instead of header trust.
+    """
+    global _AGENT_VALIDATOR, _AGENT_VALIDATOR_KEY
+    from rewire_shared.auth_client import AuthentikJWTValidator
+
+    jwks_uri = _derive_jwks_uri(
+        settings.oidc_issuer, settings.agent_jwks_uri or settings.oidc_jwks_uri
+    )
+    dev_secret = settings.oidc_dev_hs256_secret or None
+    key = (settings.oidc_issuer, jwks_uri, settings.agent_audience, dev_secret or "")
+    if _AGENT_VALIDATOR is None or _AGENT_VALIDATOR_KEY != key:
+        _AGENT_VALIDATOR = AuthentikJWTValidator(
+            issuer=settings.oidc_issuer,
+            jwks_uri=jwks_uri,
+            audience=settings.agent_audience,
+            dev_hs256_secret=dev_secret,
+        )
+        _AGENT_VALIDATOR_KEY = key
+    return _AGENT_VALIDATOR
 
 
 def hash_api_token(raw_token: str, salt: str = "beacon-v1") -> str:
