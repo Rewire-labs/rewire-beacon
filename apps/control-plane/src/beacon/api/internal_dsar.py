@@ -25,33 +25,30 @@ from rewire_shared.lgpd_dsar import (
 logger = logging.getLogger(__name__)
 
 
-_async_sessionmaker: Any = None
+def _session_ctx() -> Any:
+    """Return the canonical worker (BYPASSRLS) session context.
 
+    DSAR is internal + cross-tenant by design — the AUDIT orchestrator asks
+    rewire-messaging for ONE subject's data scoped by an explicit
+    ``tenant_id``/``subject_email`` WHERE clause. We use ``worker_session``
+    (the same engine/role as the rest of the service, RW-MESSAGING-01) rather
+    than spinning up a private sqlite engine. Returns ``None`` when the DB
+    layer is unavailable so handlers degrade to an honest empty result.
+    """
+    try:
+        from beacon.db.session import worker_session
 
-def _get_sessionmaker() -> Any:
-    global _async_sessionmaker
-    if _async_sessionmaker is None:
-        try:
-            from sqlalchemy.ext.asyncio import (
-                async_sessionmaker,
-                create_async_engine,
-            )
-
-            from beacon.settings import get_settings
-
-            engine = create_async_engine(get_settings().database_url, echo=False)
-            _async_sessionmaker = async_sessionmaker(engine, expire_on_commit=False)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("messaging_dsar.sessionmaker_failed", extra={"err": str(exc)})
-            _async_sessionmaker = False
-    return _async_sessionmaker or None
+        return worker_session
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("messaging_dsar.session_unavailable", extra={"err": str(exc)})
+        return None
 
 
 class MessagingTenantDataExporter(SubjectDataExporter):
     supported_ops = frozenset({"export"})
 
     async def export(self, ctx: DSARExporterContext) -> DSARExportArtifact:
-        sm = _get_sessionmaker()
+        sm = _session_ctx()
         tenant_id = ctx.request.tenant_id
         subject_email = ctx.request.subject_email
         counts: dict[str, int] = {}
@@ -94,37 +91,41 @@ class MessagingTenantDataExporter(SubjectDataExporter):
         )
 
 
+# Queries against the REAL schema (beacon.*). The subject is identified by the
+# notification ``recipient`` (email/phone); deliveries are scoped via their
+# parent notification. ``tenant_id`` matches ``beacon.notifications.tenant_id``.
 _DSAR_QUERIES: tuple[tuple[str, str], ...] = (
     (
         "notifications",
         """
-        SELECT id, channel, status, sent_at
-        FROM messaging.notifications
-        WHERE organization_id::text = :tenant_id
-          AND recipient_email = :subject_email
-        ORDER BY 1 DESC
+        SELECT id, channel_kind, consent_basis, created_at
+        FROM beacon.notifications
+        WHERE tenant_id = :tenant_id
+          AND recipient = :subject_email
+        ORDER BY created_at DESC
         LIMIT 200
         """,
     ),
     (
-        "templates",
+        "deliveries",
         """
-        SELECT id, name, channel, created_at
-        FROM messaging.templates
-        WHERE organization_id::text = :tenant_id
-          AND owner_email = :subject_email
-        ORDER BY 1 DESC
+        SELECT d.id, d.notification_id, d.provider, d.status, d.created_at
+        FROM beacon.deliveries d
+        JOIN beacon.notifications n ON n.id = d.notification_id
+        WHERE n.tenant_id = :tenant_id
+          AND n.recipient = :subject_email
+        ORDER BY d.created_at DESC
         LIMIT 200
         """,
     ),
     (
-        "delivery_log",
+        "suppression_entries",
         """
-        SELECT id, notification_id, status, occurred_at
-        FROM messaging.delivery_log
-        WHERE organization_id::text = :tenant_id
-          AND recipient_email = :subject_email
-        ORDER BY 1 DESC
+        SELECT id, identifier_type, identifier_value, reason, created_at
+        FROM suppression.entries
+        WHERE CAST(organization_id AS TEXT) = :tenant_id
+          AND identifier_value = :subject_email
+        ORDER BY created_at DESC
         LIMIT 200
         """,
     ),
@@ -135,7 +136,7 @@ class MessagingTenantDataDeleter(SubjectDataDeleter):
     supported_ops = frozenset({"delete", "anonymization"})
 
     async def delete(self, ctx: DSARDeleterContext) -> DSARDeleteOutcome:
-        sm = _get_sessionmaker()
+        sm = _session_ctx()
         tenant_id = ctx.request.tenant_id
         subject_email = ctx.request.subject_email
         tombstoned: dict[str, int] = {}
@@ -195,43 +196,37 @@ class MessagingTenantDataDeleter(SubjectDataDeleter):
         )
 
 
+# Hard-delete: the subject's suppression entries (opt-out preferences keyed on
+# the PII identifier itself). These carry no independent legal-retention basis
+# once the subject is erased.
 _SOFT_DELETE_SQL: tuple[tuple[str, str], ...] = (
     (
-        "templates",
+        "suppression_entries",
         """
-        UPDATE messaging.templates
-        SET tombstoned_at = now(), tombstone_reason = 'lgpd_dsar_delete'
-        WHERE organization_id::text = :tenant_id
-          AND owner_email = :subject_email
-          AND tombstoned_at IS NULL
+        DELETE FROM suppression.entries
+        WHERE CAST(organization_id AS TEXT) = :tenant_id
+          AND identifier_value = :subject_email
         RETURNING id
         """,
     ),
 )
 
 
+# Retain-under-legal-basis + redact: notification + delivery rows must be kept
+# for audit/billing/anti-fraud (LGPD Art. 16) but the recipient PII is
+# overwritten. No ``pii_redacted`` flag exists on these tables, so idempotency
+# comes from the ``NOT LIKE 'redacted-%'`` guard. The redaction key uses the
+# row id so it stays unique + reversible-proof.
 _RETAINED_SQL: tuple[tuple[str, str], ...] = (
-    (
-        "delivery_log",
-        """
-        UPDATE messaging.delivery_log
-        SET recipient_email = concat('redacted-', id::text, '@deleted.invalid'),
-            pii_redacted = true
-        WHERE organization_id::text = :tenant_id
-          AND recipient_email = :subject_email
-          AND pii_redacted IS DISTINCT FROM true
-        RETURNING id
-        """,
-    ),
     (
         "notifications",
         """
-        UPDATE messaging.notifications
-        SET recipient_email = concat('redacted-', id::text, '@deleted.invalid'),
-            pii_redacted = true
-        WHERE organization_id::text = :tenant_id
-          AND recipient_email = :subject_email
-          AND pii_redacted IS DISTINCT FROM true
+        UPDATE beacon.notifications
+        SET recipient = concat('redacted-', id, '@deleted.invalid'),
+            payload = '{}'
+        WHERE tenant_id = :tenant_id
+          AND recipient = :subject_email
+          AND recipient NOT LIKE 'redacted-%'
         RETURNING id
         """,
     ),
