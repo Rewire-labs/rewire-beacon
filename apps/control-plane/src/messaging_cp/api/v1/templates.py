@@ -1,8 +1,11 @@
 """CRUD /v1/templates — per-tenant template management (Jinja2 + i18n PT-BR/EN).
 
-Templates support placeholders ``{{ var }}`` rendered server-side via
-Jinja2 sandbox. i18n through ``locale`` field — ``pt-BR`` (default) and
-``en-US`` for V0; extensible per-tenant in V0.1.
+RW-MESSAGING-19: The DB-persisted implementation is deferred to V0.6.
+All endpoints return 501 Not Implemented with a clear roadmap message
+rather than silently echo/stub data that would mislead clients.
+
+V0.6 scope: persist to templates.{email,sms,push}_templates tables (RLS
+scoped to tenant), render via Jinja2 sandbox, wire renderer into send pipeline.
 """
 
 from __future__ import annotations
@@ -16,6 +19,16 @@ from pydantic import BaseModel, Field
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/v1/templates")
+
+_501_DETAIL = {
+    "code": "templates_not_implemented_v0",
+    "message": (
+        "Template CRUD deferred to V0.6. "
+        "Use inline html_body/plain_body/text in send requests for now. "
+        "Track: https://github.com/rewire-labs/rewire-cluster/issues (RW-MESSAGING-19)"
+    ),
+    "deferred_to": "V0.6",
+}
 
 
 class TemplateCreate(BaseModel):
@@ -48,68 +61,47 @@ def _tenant_id(request: Request) -> str:
 
 @router.post(
     "",
-    status_code=status.HTTP_201_CREATED,
-    response_model=TemplateOut,
-    summary="Create a new template",
+    status_code=status.HTTP_501_NOT_IMPLEMENTED,
+    summary="Create a new template [deferred V0.6]",
+    response_model=None,
 )
-async def create_template(
-    payload: TemplateCreate, request: Request
-) -> TemplateOut:
-    tenant_id = _tenant_id(request)
-    logger.info(
-        "messaging.templates.create",
-        extra={"tenant_id": tenant_id, "slug": payload.slug, "channel": payload.channel},
-    )
-    return TemplateOut(
-        id=f"tpl_{payload.slug}",
-        slug=payload.slug,
-        channel=payload.channel,
-        locale=payload.locale,
-        subject=payload.subject,
-        body=payload.body,
-    )
+async def create_template(payload: TemplateCreate, request: Request) -> Any:
+    # RW-MESSAGING-19: explicit 501 — not shimware echo.
+    _tenant_id(request)
+    raise HTTPException(status_code=501, detail=_501_DETAIL)
 
 
 @router.get(
     "/{template_id}",
-    response_model=TemplateOut,
-    summary="Get a template by id",
+    status_code=status.HTTP_501_NOT_IMPLEMENTED,
+    summary="Get a template by id [deferred V0.6]",
+    response_model=None,
 )
-async def get_template(template_id: str, request: Request) -> TemplateOut:
+async def get_template(template_id: str, request: Request) -> Any:
     _tenant_id(request)
-    # V0: stub — V0.1 implements DB lookup against messaging.templates table.
-    return TemplateOut(
-        id=template_id,
-        slug=template_id.replace("tpl_", ""),
-        channel="email",
-        locale="pt-BR",
-        subject="(stub) Template",
-        body="(stub) body",
-    )
+    raise HTTPException(status_code=501, detail=_501_DETAIL)
 
 
 @router.get(
     "",
-    response_model=list[TemplateOut],
-    summary="List templates for the tenant",
+    status_code=status.HTTP_501_NOT_IMPLEMENTED,
+    summary="List templates for the tenant [deferred V0.6]",
+    response_model=None,
 )
-async def list_templates(request: Request) -> list[TemplateOut]:
+async def list_templates(request: Request) -> Any:
     _tenant_id(request)
-    return []
+    raise HTTPException(status_code=501, detail=_501_DETAIL)
 
 
 @router.delete(
     "/{template_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
+    status_code=status.HTTP_501_NOT_IMPLEMENTED,
+    summary="Delete a template [deferred V0.6]",
     response_model=None,
-    summary="Delete a template",
 )
-async def delete_template(template_id: str, request: Request) -> None:
-    tenant_id = _tenant_id(request)
-    logger.info(
-        "messaging.templates.delete",
-        extra={"tenant_id": tenant_id, "template_id": template_id},
-    )
+async def delete_template(template_id: str, request: Request) -> Any:
+    _tenant_id(request)
+    raise HTTPException(status_code=501, detail=_501_DETAIL)
 
 
 __all__ = ["router"]
