@@ -13,6 +13,7 @@ from fastapi import APIRouter
 from . import (
     chain,
     deliverability,
+    notifications,
     overview,
     settings,
     sms_numbers,
@@ -27,5 +28,6 @@ api_router.include_router(deliverability.router)
 api_router.include_router(chain.router)
 api_router.include_router(team.router)
 api_router.include_router(settings.router)
+api_router.include_router(notifications.router)
 
 __all__ = ["api_router"]

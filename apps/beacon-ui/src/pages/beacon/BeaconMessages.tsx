@@ -1,61 +1,212 @@
-import { PageHeader, PageContainer, Card, Badge, StatusDot, Table, Th, Td, timeAgo } from "@/components/beacon/ui";
-import { DemoBanner } from "@/components/beacon/DemoBanner";
-import { MESSAGES, CHANNEL_LABELS } from "@/content/beacon-mock";
-import { useBeaconMessages } from "@/lib/hooks/useBeacon";
-import { Search, Filter, Send, Download } from "lucide-react";
+// BeaconMessages page
+//
+// FE-MESSAGING-04: compose-and-send UI for the core notification action.
+// Lets an operator pick channel + recipient + category + content (or template),
+// preview it, validate, and send via the canonical API (beaconApi.send).
+// FE-MESSAGING-10: built on token-driven ui/ primitives (no hardcoded zinc).
 
-// BCN-231: BeaconMessages wired to /v1/messages (and analytics).
+import * as React from "react";
+import { beaconApi, ApiError, type SendResult } from "../../lib/api";
+import {
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  Input,
+  Label,
+  Select,
+  Textarea,
+} from "../../components/beacon/ui";
+
+const CHANNELS = ["email", "sms", "push", "whatsapp"] as const;
+const CATEGORIES = ["transactional", "marketing", "digest"] as const;
+
+type Channel = (typeof CHANNELS)[number];
+
+interface FormState {
+  channel: Channel;
+  recipient: string;
+  category: string;
+  subject: string;
+  body: string;
+}
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const E164_RE = /^\+[1-9]\d{6,14}$/;
+
+function validate(form: FormState): string | null {
+  if (!form.recipient.trim()) return "Informe o destinatário.";
+  if (form.channel === "email" && !EMAIL_RE.test(form.recipient)) {
+    return "E-mail do destinatário inválido.";
+  }
+  if (
+    (form.channel === "sms" || form.channel === "whatsapp") &&
+    !E164_RE.test(form.recipient)
+  ) {
+    return "Telefone deve estar em formato E.164 (ex: +5511999998888).";
+  }
+  if (!form.body.trim()) return "O conteúdo da mensagem é obrigatório.";
+  if (form.channel === "email" && !form.subject.trim()) {
+    return "Assunto é obrigatório para e-mail.";
+  }
+  return null;
+}
+
 export default function BeaconMessages() {
-  const messages = useBeaconMessages();
-  return (
-    <PageContainer>
-      {messages.isDemo && <DemoBanner detail="GET /v1/messages indisponivel" />}
-      <PageHeader
-        title="Mensagens"
-        subtitle="Log de envios em tempo real (todos os canais). Eventos vindos de ClickHouse com retenção de 13 meses + audit chain BLAKE3."
-        actions={
-          <>
-            <button className="flex items-center gap-1.5 text-xs font-semibold border border-zinc-200 dark:border-zinc-800 px-3 py-2 rounded-md hover:bg-zinc-50 dark:hover:bg-zinc-800"><Download size={13} /> Export CSV</button>
-            <button className="flex items-center gap-1.5 text-sm font-semibold bg-accent hover:bg-accent/90 text-white px-3 py-2 rounded-md"><Send size={14} /> Test send</button>
-          </>
-        }
-      />
+  const [form, setForm] = React.useState<FormState>({
+    channel: "email",
+    recipient: "",
+    category: "transactional",
+    subject: "",
+    body: "",
+  });
+  const [sending, setSending] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [result, setResult] = React.useState<SendResult | null>(null);
 
-      <Card className="p-3 mb-4 flex items-center gap-2 flex-wrap">
-        <div className="flex items-center gap-2 bg-zinc-50 dark:bg-zinc-900 px-3 py-1.5 rounded-md flex-1 min-w-[240px]">
-          <Search size={13} className="text-zinc-400" />
-          <input className="bg-transparent text-xs outline-none flex-1" placeholder="Buscar por message_id, recipient, template..." />
-        </div>
-        <button className="flex items-center gap-1 text-xs border border-zinc-200 dark:border-zinc-800 px-2.5 py-1.5 rounded-md"><Filter size={11} /> Canal</button>
-        <button className="flex items-center gap-1 text-xs border border-zinc-200 dark:border-zinc-800 px-2.5 py-1.5 rounded-md"><Filter size={11} /> Status</button>
-        <button className="flex items-center gap-1 text-xs border border-zinc-200 dark:border-zinc-800 px-2.5 py-1.5 rounded-md"><Filter size={11} /> Período</button>
+  const update = <K extends keyof FormState>(key: K, value: FormState[K]) => {
+    setForm((f) => ({ ...f, [key]: value }));
+    setError(null);
+    setResult(null);
+  };
+
+  const onSend = async () => {
+    const validationError = validate(form);
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+    setSending(true);
+    setError(null);
+    setResult(null);
+    try {
+      const res = await beaconApi.send({
+        channel: form.channel,
+        recipient: form.recipient.trim(),
+        category: form.category,
+        subject: form.subject,
+        body: form.body,
+      });
+      setResult(res);
+      if (!res.accepted) {
+        setError(`Não enviado (${res.decision}): ${res.reason}`);
+      }
+    } catch (e) {
+      const msg = e instanceof ApiError ? e.message : "Falha ao enviar.";
+      setError(msg);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div className="grid gap-6 md:grid-cols-2">
+      <Card>
+        <CardHeader>
+          <CardTitle>Compor mensagem</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="channel">Canal</Label>
+            <Select
+              id="channel"
+              value={form.channel}
+              onChange={(e) => update("channel", e.target.value as Channel)}
+            >
+              {CHANNELS.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </Select>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="recipient">Destinatário</Label>
+            <Input
+              id="recipient"
+              value={form.recipient}
+              placeholder={
+                form.channel === "email" ? "nome@dominio.com" : "+5511999998888"
+              }
+              onChange={(e) => update("recipient", e.target.value)}
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="category">Categoria</Label>
+            <Select
+              id="category"
+              value={form.category}
+              onChange={(e) => update("category", e.target.value)}
+            >
+              {CATEGORIES.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </Select>
+          </div>
+
+          {form.channel === "email" && (
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="subject">Assunto</Label>
+              <Input
+                id="subject"
+                value={form.subject}
+                onChange={(e) => update("subject", e.target.value)}
+              />
+            </div>
+          )}
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="body">Conteúdo</Label>
+            <Textarea
+              id="body"
+              value={form.body}
+              onChange={(e) => update("body", e.target.value)}
+            />
+          </div>
+
+          {error && (
+            <p className="text-sm text-destructive" role="alert">
+              {error}
+            </p>
+          )}
+          {result?.accepted && (
+            <p className="text-sm text-primary" role="status">
+              Mensagem aceita para envio.
+            </p>
+          )}
+
+          <Button onClick={onSend} disabled={sending}>
+            {sending ? "Enviando…" : "Enviar"}
+          </Button>
+        </CardContent>
       </Card>
 
-      <Table>
-        <thead>
-          <tr>
-            <Th>Status</Th><Th>ID</Th><Th>Canal</Th><Th>Destinatário</Th><Th>Template / Assunto</Th>
-            <Th>Provider</Th><Th>Custo</Th><Th>Basis LGPD</Th><Th>Quando</Th>
-          </tr>
-        </thead>
-        <tbody>
-          {MESSAGES.map((m) => (
-            <tr key={m.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-900/40">
-              <Td><div className="flex items-center gap-2"><StatusDot status={m.status} /><span className="text-[10px] uppercase">{m.status}</span></div></Td>
-              <Td className="font-mono text-xs">{m.id}</Td>
-              <Td><Badge tone="accent">{CHANNEL_LABELS[m.channel]}</Badge></Td>
-              <Td className="text-xs">{m.recipient}</Td>
-              <Td className="text-xs"><code className="font-mono text-zinc-500">{m.template}</code>{m.subject_or_title && <p className="text-zinc-400 truncate max-w-[260px]">{m.subject_or_title}</p>}</Td>
-              <Td className="text-xs text-zinc-500">{m.provider}</Td>
-              <Td className="text-xs font-mono">R$ {m.cost_brl.toFixed(4)}</Td>
-              <Td><Badge>{m.lawful_basis}</Badge></Td>
-              <Td className="text-xs text-zinc-500">{timeAgo(m.sent_at)}</Td>
-            </tr>
-          ))}
-        </tbody>
-      </Table>
-
-      <p className="text-[11px] text-zinc-500 mt-4">Cada linha está ancorada na audit chain CITADEL. <code className="font-mono">message_id</code> + <code className="font-mono">content_hash</code> são imutáveis e podem ser usados como prova jurídica.</p>
-    </PageContainer>
+      <Card>
+        <CardHeader>
+          <CardTitle>Preview</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3">
+          <div className="flex items-center gap-2">
+            <Badge>{form.channel}</Badge>
+            <Badge>{form.category}</Badge>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Para: {form.recipient || "—"}
+          </p>
+          {form.channel === "email" && (
+            <p className="text-sm font-medium">{form.subject || "(sem assunto)"}</p>
+          )}
+          <div className="rounded-md border border-border bg-muted p-3 text-sm whitespace-pre-wrap">
+            {form.body || "(mensagem vazia)"}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
   );
 }

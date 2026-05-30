@@ -78,6 +78,52 @@ def test_team_invite(client: TestClient):
     assert r.json()["role"] == "editor"
 
 
+def test_notifications_send_allow(client: TestClient):
+    r = client.post(
+        "/v1/notifications/send",
+        json={
+            "channel": "email",
+            "recipient": "a@x.com",
+            "body": "hello",
+            "idempotency_key": "send-1",
+        },
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["accepted"] is True
+    assert body["decision"] == "allow"
+
+
+def test_notifications_send_dedupe(client: TestClient):
+    payload = {
+        "channel": "sms",
+        "recipient": "+5511999998888",
+        "body": "hi",
+        "idempotency_key": "dupe-key",
+    }
+    first = client.post("/v1/notifications/send", json=payload)
+    second = client.post("/v1/notifications/send", json=payload)
+    assert first.json()["accepted"] is True
+    assert second.json()["accepted"] is False
+    assert second.json()["decision"] == "duplicate"
+
+
+def test_notifications_send_invalid_channel(client: TestClient):
+    r = client.post(
+        "/v1/notifications/send",
+        json={"channel": "carrier-pigeon", "recipient": "a@x.com", "body": "x"},
+    )
+    assert r.status_code == 422
+
+
+def test_notifications_send_requires_body(client: TestClient):
+    r = client.post(
+        "/v1/notifications/send",
+        json={"channel": "email", "recipient": "a@x.com"},
+    )
+    assert r.status_code == 422
+
+
 def test_settings_get_and_update(client: TestClient):
     assert client.get("/v1/settings").status_code == 200
     r = client.put(

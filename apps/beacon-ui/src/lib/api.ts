@@ -339,7 +339,24 @@ export interface WorkspaceSettings {
   rate_limit_per_minute: number;
 }
 
+export interface SendPayload {
+  channel: string;
+  recipient: string;
+  category?: string;
+  subject?: string;
+  body?: string;
+  template_id?: string;
+  idempotency_key?: string;
+}
+export interface SendResult {
+  decision: string;
+  reason: string;
+  accepted: boolean;
+}
+
 export const beaconApi = {
+  send: (body: SendPayload) =>
+    api.post<SendResult>("/v1/notifications/send", body),
   overview: (period = "7d") =>
     api.get<Overview>("/v1/overview", { period }),
   smsNumbers: {
