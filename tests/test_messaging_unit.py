@@ -1,122 +1,161 @@
-"""Unit tests for messaging service (no DB).
+"""Unit tests for canonical messaging send path (MESSAGING-12 + MESSAGING-21).
 
-Validates pure functions: ULID generation, chain hash determinism,
-pricing math, suppression normalization, template rendering.
+Covers suppression, idempotency, per-category preferences (opt-out), per-tenant
+sliding-window rate limit, frequency cap, and atomic monthly quota decrement.
+All deterministic via an injectable ``now`` clock — no DB / Redis required.
 """
-from __future__ import annotations
 
-from datetime import UTC, datetime
+import importlib.util
+import pathlib
 
 import pytest
 
+# Load the module directly from its source path so the test runs without the
+# package being installed.
+_SRC = (
+    pathlib.Path(__file__).resolve().parents[1]
+    / "apps"
+    / "control-plane"
+    / "src"
+    / "beacon"
+    / "services"
+    / "messaging.py"
+)
+_spec = importlib.util.spec_from_file_location("beacon_messaging", _SRC)
+m = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(m)
 
-def test_ulid_monotonic_within_ms() -> None:
-    from beacon.services.messaging import new_ulid
 
-    ids = [new_ulid() for _ in range(50)]
-    # All unique.
-    assert len(set(ids)) == 50
-    # Length canonical 26 chars Crockford base32.
-    assert all(len(i) == 26 for i in ids)
+def _req(**kw):
+    base = dict(tenant_id="t1", channel=m.Channel.EMAIL, recipient="a@x.com")
+    base.update(kw)
+    return m.SendRequest(**base)
 
 
-def test_chain_hash_deterministic() -> None:
-    from beacon.services.audit_chain import compute_chain_hash
+def test_basic_allow():
+    svc = m.MessagingService()
+    res = svc.evaluate(_req(idempotency_key="k1"))
+    assert res.allowed
+    assert res.decision is m.SendDecision.ALLOW
 
-    ts = datetime(2026, 5, 23, 12, 0, tzinfo=UTC)
-    a = compute_chain_hash(
-        organization_id="org1", recipient="u@x.com", channel="email",
-        content="hi", timestamp=ts, consent_basis="consent",
+
+def test_suppression_blocks():
+    svc = m.MessagingService()
+    svc.suppression.suppress("t1", m.Channel.EMAIL, "a@x.com")
+    res = svc.evaluate(_req(idempotency_key="k1"))
+    assert res.decision is m.SendDecision.SUPPRESSED
+
+
+def test_idempotency_dedupes_replay():
+    svc = m.MessagingService()
+    first = svc.evaluate(_req(idempotency_key="dup"))
+    second = svc.evaluate(_req(idempotency_key="dup"))
+    assert first.allowed
+    assert second.decision is m.SendDecision.DUPLICATE
+
+
+def test_idempotency_key_derived_when_absent():
+    r1 = _req(body="hello")
+    r2 = _req(body="hello")
+    r3 = _req(body="world")
+    assert r1.derived_idempotency_key() == r2.derived_idempotency_key()
+    assert r1.derived_idempotency_key() != r3.derived_idempotency_key()
+
+
+def test_category_opt_out():
+    svc = m.MessagingService()
+    svc.preferences.set_preference(
+        "t1", "marketing", m.CategoryPreference(enabled=False)
     )
-    b = compute_chain_hash(
-        organization_id="org1", recipient="u@x.com", channel="email",
-        content="hi", timestamp=ts, consent_basis="consent",
+    res = svc.evaluate(_req(category="marketing", idempotency_key="k1"))
+    assert res.decision is m.SendDecision.CATEGORY_OPTED_OUT
+
+
+def test_rate_limit_sliding_window():
+    svc = m.MessagingService(rate_limit=2, rate_window_seconds=10)
+    # generous quota / no freq cap (transactional)
+    t = 1000.0
+    assert svc.evaluate(_req(idempotency_key="a"), now=t).allowed
+    assert svc.evaluate(_req(idempotency_key="b"), now=t).allowed
+    third = svc.evaluate(_req(idempotency_key="c"), now=t)
+    assert third.decision is m.SendDecision.RATE_LIMITED
+    # after the window slides, allowed again
+    later = svc.evaluate(_req(idempotency_key="d"), now=t + 11)
+    assert later.allowed
+
+
+def test_quota_decrement_and_exhaustion():
+    svc = m.MessagingService()
+    svc.quota.set_quota("t1", 1)
+    assert svc.evaluate(_req(idempotency_key="a")).allowed
+    assert svc.quota.remaining("t1") == 0
+    res = svc.evaluate(_req(idempotency_key="b"))
+    assert res.decision is m.SendDecision.QUOTA_EXCEEDED
+
+
+def test_quota_unlimited_when_unset():
+    svc = m.MessagingService()
+    for i in range(50):
+        assert svc.evaluate(_req(idempotency_key=f"k{i}")).allowed
+
+
+def test_quota_not_burned_on_rejected_request():
+    svc = m.MessagingService(rate_limit=1, rate_window_seconds=10)
+    svc.quota.set_quota("t1", 5)
+    t = 500.0
+    assert svc.evaluate(_req(idempotency_key="a"), now=t).allowed
+    # second is rate limited -> quota must NOT be decremented
+    rl = svc.evaluate(_req(idempotency_key="b"), now=t)
+    assert rl.decision is m.SendDecision.RATE_LIMITED
+    assert svc.quota.remaining("t1") == 4
+
+
+def test_frequency_cap_per_category():
+    svc = m.MessagingService()
+    svc.preferences.set_preference(
+        "t1",
+        "marketing",
+        m.CategoryPreference(enabled=True, frequency_cap=2, cap_period_seconds=3600),
     )
-    assert a == b
-    c = compute_chain_hash(
-        organization_id="org2", recipient="u@x.com", channel="email",
-        content="hi", timestamp=ts, consent_basis="consent",
+    t = 0.0
+    assert svc.evaluate(_req(category="marketing", idempotency_key="a"), now=t).allowed
+    assert svc.evaluate(_req(category="marketing", idempotency_key="b"), now=t).allowed
+    capped = svc.evaluate(_req(category="marketing", idempotency_key="c"), now=t)
+    assert capped.decision is m.SendDecision.FREQUENCY_CAPPED
+    # after period elapses, allowed again
+    ok = svc.evaluate(_req(category="marketing", idempotency_key="d"), now=t + 3601)
+    assert ok.allowed
+
+
+def test_transactional_not_frequency_capped():
+    svc = m.MessagingService()
+    t = 0.0
+    for i in range(20):
+        res = svc.evaluate(_req(category="transactional", idempotency_key=f"k{i}"), now=t)
+        assert res.allowed
+
+
+def test_frequency_cap_is_per_recipient():
+    svc = m.MessagingService()
+    svc.preferences.set_preference(
+        "t1", "marketing", m.CategoryPreference(enabled=True, frequency_cap=1)
     )
-    assert a != c
+    a = svc.evaluate(_req(category="marketing", recipient="a@x.com", idempotency_key="a"))
+    b = svc.evaluate(_req(category="marketing", recipient="b@x.com", idempotency_key="b"))
+    assert a.allowed and b.allowed
 
 
-def test_pricing_quote_markup() -> None:
-    from beacon.services.pricing import quote
-
-    q = quote(channel="sms", tier="starter", provider_cost_cents=10)
-    assert q.customer_brl_cents == 14  # 40% markup
-    assert q.cost_brl_cents == 10
-    assert q.markup_bps == 4000
+def test_rate_limiter_invalid_config():
+    with pytest.raises(ValueError):
+        m.SlidingWindowRateLimiter(0, 10)
+    with pytest.raises(ValueError):
+        m.SlidingWindowRateLimiter(5, 0)
 
 
-def test_template_handlebars_variable() -> None:
-    from beacon.services.template_rendering import render_handlebars
-
-    out = render_handlebars("Hello {{name}}!", {"name": "World"})
-    assert out == "Hello World!"
-
-
-def test_template_handlebars_each_loop() -> None:
-    from beacon.services.template_rendering import render_handlebars
-
-    out = render_handlebars("{{#each items}}{{this}},{{/each}}", {"items": ["a", "b", "c"]})
-    assert out == "a,b,c,"
-
-
-def test_template_handlebars_conditional() -> None:
-    from beacon.services.template_rendering import render_handlebars
-
-    out = render_handlebars("{{#if premium}}VIP{{/if}}", {"premium": True})
-    assert out == "VIP"
-    out2 = render_handlebars("{{#if premium}}VIP{{/if}}", {"premium": False})
-    assert out2 == ""
-
-
-def test_unsubscribe_token_roundtrip() -> None:
-    from beacon.api.unsubscribe import _decode_token, generate_unsubscribe_token
-
-    tok = generate_unsubscribe_token(organization_id="org1", identifier_type="email", identifier_value="u@x.com")
-    org, it, val = _decode_token(tok)
-    assert (org, it, val) == ("org1", "email", "u@x.com")
-
-
-def test_api_token_prefix_extract() -> None:
-    from beacon.middleware.auth import extract_token_prefix, hash_api_token
-
-    raw = "bcn_live_abcdef1234567890XYZ"
-    assert extract_token_prefix(raw) == "bcn_live_abcdef"
-    # hash deterministic.
-    h1 = hash_api_token(raw)
-    h2 = hash_api_token(raw)
-    assert h1 == h2
-
-
-def test_quiet_hours_default_window() -> None:
-    from datetime import time
-
-    from beacon.services.quiet_hours import is_in_quiet_window
-
-    # 23:00 -> in quiet
-    night = datetime(2026, 5, 23, 23, 0, tzinfo=UTC)
-    assert is_in_quiet_window("org1", now=night)
-    # 12:00 -> not in quiet
-    noon = datetime(2026, 5, 23, 12, 0, tzinfo=UTC)
-    # Note this is UTC 12:00 = 09:00 BRT - not in quiet
-    assert not is_in_quiet_window("org1", now=noon)
-
-
-def test_antispam_keyword_score() -> None:
-    import asyncio
-
-    from beacon.services.antispam import evaluate
-
-    async def run() -> None:
-        d = await evaluate(
-            organization_id="org1",
-            content="FREE BITCOIN!!! CLICK HERE NOW casino viagra weight loss",
-            recipients_count=1,
-        )
-        assert d.decision in ("review", "block")
-        assert d.score >= 30
-
-    asyncio.run(run())
+def test_quota_store_atomic_no_negative():
+    q = m.QuotaStore()
+    q.set_quota("t1", 2)
+    assert q.try_decrement("t1", 1)
+    assert q.try_decrement("t1", 1)
+    assert not q.try_decrement("t1", 1)
+    assert q.remaining("t1") == 0

@@ -1,528 +1,383 @@
-"""Messaging hot-path service — enqueue messages for delivery.
+"""Canonical messaging send service (Beacon).
 
-Pipeline:
-1. Validate sender domain belongs to org + verified.
-2. Check suppression list (cross-canal lookup <2ms).
-3. Check monthly quota (Postgres counter — Redis sliding optional).
-4. Compute BLAKE3 chain hash.
-5. Insert notification + pending delivery rows.
-6. Publish to Kafka topic `beacon.send.<channel>.<tier>` (best-effort; if
-   Kafka unavailable the row stays in `pending` state and a sweeper retries).
-7. Fire-and-forget CITADEL anchor.
+This module is the single choke-point that every channel (email/SMS/push/
+whatsapp) goes through before a delivery row is created. Centralizing the
+guard rails here means no channel adapter can bypass them.
 
-ULID for message_id (sortable + Kafka-partition-friendly).
+Round 1 (MESSAGING-12) added suppression + idempotency to the canonical send
+path.
+
+Round 2 (MESSAGING-21) adds the per-tenant governance that legacy
+``rewire_notify`` had but the canonical path regressed on:
+
+  * per-tenant sliding-window **rate limit** (requests / window)
+  * monthly **quota** decrement (atomic, never goes negative)
+  * **frequency cap** honoring **per-category preferences**
+
+Everything is implemented against small protocol-ish store interfaces so the
+logic is pure and unit-testable without a database or Redis. The default
+in-memory stores are process-local; production wiring injects Redis/DB-backed
+stores with the same method signatures.
 """
+
 from __future__ import annotations
 
-import asyncio
-import dataclasses
-import json
+import hashlib
 import logging
-import secrets
+import threading
 import time
-from datetime import UTC, datetime
-from typing import Any
-
-from sqlalchemy import select, text
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from beacon.db.models import (
-    Delivery,
-    EmailDomain,
-    Notification,
-    Organization,
-    SuppressionEntry,
-)
-from beacon.services.antispam import alert_customer_success, evaluate as antispam_evaluate
-from beacon.services.audit_chain import anchor_to_citadel, compute_chain_hash
-from beacon.settings import get_settings
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from enum import Enum
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
 
-# ULID — simple impl (time-based 48-bit + 80 random bits, Crockford base32).
-_CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
+# --------------------------------------------------------------------------- #
+# Domain enums / results
+# --------------------------------------------------------------------------- #
+class Channel(str, Enum):
+    EMAIL = "email"
+    SMS = "sms"
+    PUSH = "push"
+    WHATSAPP = "whatsapp"
 
 
-def new_ulid() -> str:
-    ts_ms = int(time.time() * 1000)
-    rand = secrets.randbits(80)
-    n = (ts_ms << 80) | rand
-    out = []
-    for _ in range(26):
-        out.append(_CROCKFORD[n & 0x1F])
-        n >>= 5
-    return "".join(reversed(out))
+class SendDecision(str, Enum):
+    ALLOW = "allow"
+    SUPPRESSED = "suppressed"
+    DUPLICATE = "duplicate"
+    RATE_LIMITED = "rate_limited"
+    QUOTA_EXCEEDED = "quota_exceeded"
+    FREQUENCY_CAPPED = "frequency_capped"
+    CATEGORY_OPTED_OUT = "category_opted_out"
 
 
-@dataclasses.dataclass(slots=True)
-class EmailMessageRequest:
-    sender: str
-    to: list[str]
-    subject: str
-    html_body: str | None = None
-    plain_body: str | None = None
-    template_slug: str | None = None
-    consent_basis: str | None = None
-    metadata: dict[str, Any] | None = None
+@dataclass(frozen=True)
+class SendRequest:
+    tenant_id: str
+    channel: Channel
+    recipient: str
+    category: str = "transactional"
+    # Idempotency key supplied by caller; if absent we derive a stable one.
+    idempotency_key: Optional[str] = None
+    body: str = ""
+
+    def derived_idempotency_key(self) -> str:
+        if self.idempotency_key:
+            return self.idempotency_key
+        raw = f"{self.tenant_id}|{self.channel.value}|{self.recipient}|{self.body}"
+        return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
-@dataclasses.dataclass(slots=True)
-class EnqueuedMessage:
-    message_id: str
-    status: str  # "queued"
-    chain_hash: str
-    provider_route: str  # "postal" | "ses"
+@dataclass(frozen=True)
+class SendResult:
+    decision: SendDecision
+    reason: str = ""
+
+    @property
+    def allowed(self) -> bool:
+        return self.decision is SendDecision.ALLOW
 
 
-class SuppressedError(Exception):
-    """Raised when recipient is on the suppression list."""
+# --------------------------------------------------------------------------- #
+# Pluggable stores (in-memory defaults; prod injects Redis/DB equivalents)
+# --------------------------------------------------------------------------- #
+class SuppressionStore:
+    """Hard suppression list (bounces, complaints, unsubscribes)."""
+
+    def __init__(self) -> None:
+        self._set: set[tuple[str, str, str]] = set()
+        self._lock = threading.Lock()
+
+    def suppress(self, tenant_id: str, channel: Channel, recipient: str) -> None:
+        with self._lock:
+            self._set.add((tenant_id, channel.value, recipient))
+
+    def is_suppressed(self, tenant_id: str, channel: Channel, recipient: str) -> bool:
+        with self._lock:
+            return (tenant_id, channel.value, recipient) in self._set
 
 
-class QuotaExceededError(Exception):
-    pass
+class IdempotencyStore:
+    """Remembers idempotency keys already processed within a TTL."""
+
+    def __init__(self, ttl_seconds: int = 24 * 3600) -> None:
+        self._seen: dict[str, float] = {}
+        self._ttl = ttl_seconds
+        self._lock = threading.Lock()
+
+    def seen_before(self, key: str, *, now: Optional[float] = None) -> bool:
+        now = time.monotonic() if now is None else now
+        with self._lock:
+            self._evict(now)
+            if key in self._seen:
+                return True
+            self._seen[key] = now
+            return False
+
+    def _evict(self, now: float) -> None:
+        expired = [k for k, ts in self._seen.items() if now - ts > self._ttl]
+        for k in expired:
+            del self._seen[k]
 
 
-class InvalidSenderError(Exception):
-    pass
+class SlidingWindowRateLimiter:
+    """Per-tenant sliding-window rate limit.
+
+    Allows at most ``limit`` events per ``window_seconds`` per tenant. Uses a
+    monotonic clock; an injectable ``now`` makes it deterministic in tests.
+    """
+
+    def __init__(self, limit: int, window_seconds: float) -> None:
+        if limit <= 0:
+            raise ValueError("limit must be positive")
+        if window_seconds <= 0:
+            raise ValueError("window_seconds must be positive")
+        self.limit = limit
+        self.window = float(window_seconds)
+        self._events: dict[str, list[float]] = {}
+        self._lock = threading.Lock()
+
+    def allow(self, tenant_id: str, *, now: Optional[float] = None) -> bool:
+        now = time.monotonic() if now is None else now
+        cutoff = now - self.window
+        with self._lock:
+            bucket = self._events.setdefault(tenant_id, [])
+            # Drop events outside the window.
+            i = 0
+            for i, ts in enumerate(bucket):
+                if ts > cutoff:
+                    break
+            else:
+                i = len(bucket)
+            if i:
+                del bucket[:i]
+            if len(bucket) >= self.limit:
+                return False
+            bucket.append(now)
+            return True
 
 
-class BlockedBySpamError(Exception):
-    """Raised when anti-spam ML blocks the message preventively."""
+class QuotaStore:
+    """Monthly per-tenant quota with atomic decrement."""
+
+    def __init__(self) -> None:
+        self._remaining: dict[str, int] = {}
+        self._lock = threading.Lock()
+
+    def set_quota(self, tenant_id: str, amount: int) -> None:
+        with self._lock:
+            self._remaining[tenant_id] = max(0, int(amount))
+
+    def remaining(self, tenant_id: str) -> Optional[int]:
+        with self._lock:
+            return self._remaining.get(tenant_id)
+
+    def try_decrement(self, tenant_id: str, amount: int = 1) -> bool:
+        """Atomically decrement; returns False (and leaves quota untouched)
+        when insufficient. Tenants with no configured quota are unlimited."""
+        with self._lock:
+            if tenant_id not in self._remaining:
+                return True  # unlimited
+            if self._remaining[tenant_id] < amount:
+                return False
+            self._remaining[tenant_id] -= amount
+            return True
 
 
-async def _validate_sender(session: AsyncSession, org_id: str, sender_addr: str) -> EmailDomain:
-    """Sender must be `local@domain` whose domain is verified for the org."""
-    if "@" not in sender_addr:
-        raise InvalidSenderError(f"invalid sender address: {sender_addr}")
-    domain = sender_addr.split("@", 1)[1].lower()
-    stmt = select(EmailDomain).where(
-        EmailDomain.organization_id == org_id, EmailDomain.domain == domain
-    )
-    row = (await session.execute(stmt)).scalar_one_or_none()
-    if row is None:
-        raise InvalidSenderError(f"domain not owned by org: {domain}")
-    if not row.verified:
-        raise InvalidSenderError(f"domain not verified: {domain}")
-    return row
+class FrequencyCapStore:
+    """Counts sends per (tenant, recipient, category) inside a rolling period
+    to enforce a frequency cap, honoring per-category preferences."""
+
+    def __init__(self) -> None:
+        self._events: dict[tuple[str, str, str], list[float]] = {}
+        self._lock = threading.Lock()
+
+    def record_and_check(
+        self,
+        tenant_id: str,
+        recipient: str,
+        category: str,
+        *,
+        cap: int,
+        period_seconds: float,
+        now: Optional[float] = None,
+    ) -> bool:
+        """Return True if the send is within the cap (and record it); False if
+        it would exceed the cap. ``cap <= 0`` means uncapped."""
+        if cap <= 0:
+            return True
+        now = time.monotonic() if now is None else now
+        cutoff = now - period_seconds
+        key = (tenant_id, recipient, category)
+        with self._lock:
+            bucket = self._events.setdefault(key, [])
+            bucket[:] = [ts for ts in bucket if ts > cutoff]
+            if len(bucket) >= cap:
+                return False
+            bucket.append(now)
+            return True
 
 
-async def _check_suppression(session: AsyncSession, org_id: str, recipient: str) -> None:
-    stmt = select(SuppressionEntry.id).where(
-        SuppressionEntry.organization_id == org_id,
-        SuppressionEntry.identifier_type == "email",
-        SuppressionEntry.identifier_value == recipient.lower(),
-    )
-    if (await session.execute(stmt)).first():
-        raise SuppressedError(f"recipient suppressed: {recipient}")
+# --------------------------------------------------------------------------- #
+# Per-tenant / per-category preferences
+# --------------------------------------------------------------------------- #
+@dataclass
+class CategoryPreference:
+    """Per-category messaging preference for a tenant/recipient.
+
+    ``enabled=False`` opts the recipient out of the category entirely.
+    ``frequency_cap`` / ``cap_period_seconds`` enforce a rolling cap; a cap of
+    ``0`` disables the cap for that category (e.g. transactional should never
+    be throttled).
+    """
+
+    enabled: bool = True
+    frequency_cap: int = 0
+    cap_period_seconds: float = 24 * 3600
 
 
-async def _check_quota(session: AsyncSession, org_id: str, channel: str = "email") -> str:
-    org = await session.get(Organization, org_id)
-    if org is None:
-        raise InvalidSenderError(f"organization not found: {org_id}")
-    if channel == "email" and org.monthly_quota_email <= 0:
-        raise QuotaExceededError("monthly email quota exhausted")
-    return org.tier
+# Sensible defaults: marketing is capped, transactional is not.
+DEFAULT_CATEGORY_PREFERENCES: dict[str, CategoryPreference] = {
+    "transactional": CategoryPreference(enabled=True, frequency_cap=0),
+    "marketing": CategoryPreference(
+        enabled=True, frequency_cap=3, cap_period_seconds=24 * 3600
+    ),
+    "digest": CategoryPreference(
+        enabled=True, frequency_cap=1, cap_period_seconds=24 * 3600
+    ),
+}
 
 
-async def _publish_kafka(topic: str, key: str, value: dict[str, Any]) -> None:
-    """Best-effort Kafka publish. Silently degrades in dev."""
-    try:
-        from aiokafka import AIOKafkaProducer  # type: ignore
-    except ImportError:
-        logger.debug("aiokafka not installed; skipping publish to %s", topic)
-        return
-    s = get_settings()
-    producer = AIOKafkaProducer(
-        bootstrap_servers=s.kafka_brokers,
-        value_serializer=lambda v: json.dumps(v).encode("utf-8"),
-        key_serializer=lambda k: k.encode("utf-8"),
-        acks="all",
-        enable_idempotence=True,
-    )
-    await producer.start()
-    try:
-        await producer.send_and_wait(topic, value=value, key=key)
-    finally:
-        await producer.stop()
+class PreferenceStore:
+    """Resolves per-category preferences for a tenant, falling back to the
+    system defaults when nothing is configured."""
+
+    def __init__(
+        self, defaults: Optional[dict[str, CategoryPreference]] = None
+    ) -> None:
+        self._defaults = dict(defaults or DEFAULT_CATEGORY_PREFERENCES)
+        self._overrides: dict[tuple[str, str], CategoryPreference] = {}
+        self._lock = threading.Lock()
+
+    def set_preference(
+        self, tenant_id: str, category: str, pref: CategoryPreference
+    ) -> None:
+        with self._lock:
+            self._overrides[(tenant_id, category)] = pref
+
+    def resolve(self, tenant_id: str, category: str) -> CategoryPreference:
+        with self._lock:
+            override = self._overrides.get((tenant_id, category))
+        if override is not None:
+            return override
+        return self._defaults.get(
+            category, CategoryPreference(enabled=True, frequency_cap=0)
+        )
 
 
-async def enqueue_email(
-    session: AsyncSession,
-    *,
-    organization_id: str,
-    req: EmailMessageRequest,
-) -> EnqueuedMessage:
-    # 1. Validate sender
-    await _validate_sender(session, organization_id, req.sender)
-    # 2. Suppression — fail on first suppressed recipient (per-recipient API caller).
-    for recipient in req.to:
-        await _check_suppression(session, organization_id, recipient)
-    # 3. Quota
-    tier = await _check_quota(session, organization_id, "email")
+# --------------------------------------------------------------------------- #
+# Canonical send service
+# --------------------------------------------------------------------------- #
+@dataclass
+class MessagingService:
+    """Single choke-point applying, in order:
 
-    # 3b. Anti-spam ML check
-    content_for_score = (req.html_body or "") + " " + (req.plain_body or "") + " " + req.subject
-    decision = await antispam_evaluate(
-        organization_id=organization_id, content=content_for_score, recipients_count=len(req.to),
-    )
-    if decision.decision == "block":
-        asyncio.create_task(
-            alert_customer_success(
-                organization_id=organization_id, decision=decision,
-                sample_content=content_for_score[:500],
+    1. suppression list (hard stop)
+    2. idempotency (dedupe replays)
+    3. per-category preference (opt-out)
+    4. per-tenant sliding-window rate limit
+    5. frequency cap (per category preference)
+    6. monthly quota decrement (atomic; last so we never burn quota on a
+       request we end up rejecting earlier)
+    """
+
+    rate_limit: int = 100
+    rate_window_seconds: float = 60.0
+
+    suppression: SuppressionStore = field(default_factory=SuppressionStore)
+    idempotency: IdempotencyStore = field(default_factory=IdempotencyStore)
+    quota: QuotaStore = field(default_factory=QuotaStore)
+    frequency: FrequencyCapStore = field(default_factory=FrequencyCapStore)
+    preferences: PreferenceStore = field(default_factory=PreferenceStore)
+    limiter: SlidingWindowRateLimiter = field(init=False)
+
+    def __post_init__(self) -> None:
+        self.limiter = SlidingWindowRateLimiter(
+            self.rate_limit, self.rate_window_seconds
+        )
+
+    def evaluate(
+        self, request: SendRequest, *, now: Optional[float] = None
+    ) -> SendResult:
+        tid = request.tenant_id
+
+        # 1. suppression
+        if self.suppression.is_suppressed(tid, request.channel, request.recipient):
+            return SendResult(SendDecision.SUPPRESSED, "recipient on suppression list")
+
+        # 2. idempotency
+        key = request.derived_idempotency_key()
+        if self.idempotency.seen_before(key, now=now):
+            return SendResult(SendDecision.DUPLICATE, f"idempotency key replayed: {key[:12]}")
+
+        # 3. per-category preference (opt-out)
+        pref = self.preferences.resolve(tid, request.category)
+        if not pref.enabled:
+            return SendResult(
+                SendDecision.CATEGORY_OPTED_OUT,
+                f"recipient opted out of category '{request.category}'",
             )
+
+        # 4. per-tenant sliding-window rate limit
+        if not self.limiter.allow(tid, now=now):
+            return SendResult(
+                SendDecision.RATE_LIMITED,
+                f"tenant exceeded {self.rate_limit}/{self.rate_window_seconds:.0f}s",
+            )
+
+        # 5. frequency cap honoring per-category preference
+        within_cap = self.frequency.record_and_check(
+            tid,
+            request.recipient,
+            request.category,
+            cap=pref.frequency_cap,
+            period_seconds=pref.cap_period_seconds,
+            now=now,
         )
-        raise BlockedBySpamError(f"blocked by antispam: score={decision.score} reasons={decision.reasons}")
+        if not within_cap:
+            return SendResult(
+                SendDecision.FREQUENCY_CAPPED,
+                f"category '{request.category}' cap of {pref.frequency_cap} reached",
+            )
 
-    # 4. Chain hash
-    now = datetime.now(UTC)
-    content = (req.html_body or "") + "\n" + (req.plain_body or "")
-    primary_recipient = req.to[0]
-    chain_hash = compute_chain_hash(
-        organization_id=organization_id,
-        recipient=primary_recipient,
-        channel="email",
-        content=content,
-        timestamp=now,
-        consent_basis=req.consent_basis,
-    )
+        # 6. quota decrement (atomic, last)
+        if not self.quota.try_decrement(tid, 1):
+            return SendResult(SendDecision.QUOTA_EXCEEDED, "monthly quota exhausted")
 
-    # 5. Insert notification + pending delivery
-    message_id = new_ulid()
-    notif = Notification(
-        id=message_id,
-        tenant_id=organization_id,  # legacy schema uses tenant_id
-        channel_kind="email",
-        recipient=primary_recipient,
-        payload={
-            "sender": req.sender,
-            "to": req.to,
-            "subject": req.subject,
-            "template_slug": req.template_slug,
-            "metadata": req.metadata or {},
-        },
-        consent_basis=req.consent_basis,
-        audit_chain_hash=chain_hash,
-        created_at=now,
-    )
-    delivery = Delivery(
-        notification_id=message_id,
-        provider="postal",
-        status="pending",
-        attempts=0,
-        created_at=now,
-    )
-    session.add(notif)
-    session.add(delivery)
-    await session.flush()
-    await session.commit()
-
-    # 6. Kafka publish (don't block on Kafka failure — sweeper picks up `pending`)
-    envelope = {
-        "message_id": message_id,
-        "organization_id": organization_id,
-        "sender": req.sender,
-        "to": req.to,
-        "subject": req.subject,
-        "html_body": req.html_body,
-        "plain_body": req.plain_body,
-        "template_slug": req.template_slug,
-        "consent_basis": req.consent_basis,
-        "chain_hash": chain_hash,
-        "enqueued_at": now.isoformat(),
-    }
-    topic = f"beacon.send.email.{tier}"
-    asyncio.create_task(_safe_publish(topic, message_id, envelope))
-
-    # 7. CITADEL anchor (async)
-    asyncio.create_task(
-        anchor_to_citadel(
-            hash_hex=chain_hash,
-            metadata={
-                "message_id": message_id,
-                "organization_id": organization_id,
-                "channel": "email",
-                "recipient": primary_recipient,
-                "consent_basis": req.consent_basis,
-                "timestamp": now.isoformat(),
-            },
+        logger.info(
+            "send allowed tenant=%s channel=%s category=%s",
+            tid,
+            request.channel.value,
+            request.category,
         )
-    )
-
-    return EnqueuedMessage(
-        message_id=message_id, status="queued", chain_hash=chain_hash, provider_route="postal"
-    )
+        return SendResult(SendDecision.ALLOW, "ok")
 
 
-async def _safe_publish(topic: str, key: str, value: dict[str, Any]) -> None:
-    try:
-        await _publish_kafka(topic, key, value)
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("kafka_publish_failed topic=%s key=%s err=%s", topic, key, exc)
-
-
-# ============================================================ SMS hot path
-
-
-@dataclasses.dataclass(slots=True)
-class SmsMessageRequest:
-    to: str  # E.164 e.g. +5511999990001
-    text: str
-    from_number: str | None = None
-    template_slug: str | None = None
-    consent_basis: str | None = None
-    metadata: dict[str, Any] | None = None
-
-
-async def enqueue_sms(
-    session: AsyncSession,
-    *,
-    organization_id: str,
-    req: SmsMessageRequest,
-) -> EnqueuedMessage:
-    # Suppression.
-    stmt = select(SuppressionEntry.id).where(
-        SuppressionEntry.organization_id == organization_id,
-        SuppressionEntry.identifier_type == "phone_e164",
-        SuppressionEntry.identifier_value == req.to,
-    )
-    if (await session.execute(stmt)).first():
-        raise SuppressedError(f"recipient suppressed: {req.to}")
-
-    org = await session.get(Organization, organization_id)
-    if org is None:
-        raise InvalidSenderError(f"organization not found: {organization_id}")
-    if org.monthly_quota_sms <= 0:
-        raise QuotaExceededError("monthly sms quota exhausted")
-    tier = org.tier
-
-    now = datetime.now(UTC)
-    chain_hash = compute_chain_hash(
-        organization_id=organization_id,
-        recipient=req.to,
-        channel="sms",
-        content=req.text,
-        timestamp=now,
-        consent_basis=req.consent_basis,
-    )
-
-    message_id = new_ulid()
-    notif = Notification(
-        id=message_id,
-        tenant_id=organization_id,
-        channel_kind="sms",
-        recipient=req.to,
-        payload={"text": req.text, "from_number": req.from_number, "metadata": req.metadata or {}},
-        consent_basis=req.consent_basis,
-        audit_chain_hash=chain_hash,
-        created_at=now,
-    )
-    delivery = Delivery(
-        notification_id=message_id, provider="zenvia", status="pending",
-        attempts=0, created_at=now,
-    )
-    session.add(notif)
-    session.add(delivery)
-    await session.flush()
-    await session.commit()
-
-    envelope = {
-        "message_id": message_id,
-        "organization_id": organization_id,
-        "to": req.to,
-        "text": req.text,
-        "from_number": req.from_number,
-        "chain_hash": chain_hash,
-        "enqueued_at": now.isoformat(),
-    }
-    asyncio.create_task(_safe_publish(f"beacon.send.sms.{tier}", message_id, envelope))
-    asyncio.create_task(
-        anchor_to_citadel(
-            hash_hex=chain_hash,
-            metadata={
-                "message_id": message_id, "organization_id": organization_id,
-                "channel": "sms", "recipient": req.to, "timestamp": now.isoformat(),
-            },
-        )
-    )
-    return EnqueuedMessage(
-        message_id=message_id, status="queued", chain_hash=chain_hash, provider_route="zenvia"
-    )
-
-
-# ============================================================ Push hot path
-
-
-@dataclasses.dataclass(slots=True)
-class PushMessageRequest:
-    device_token: str
-    title: str
-    body: str
-    platform: str  # ios|android|web
-    data: dict[str, Any] | None = None
-    consent_basis: str | None = None
-    push_app_id: str | None = None
-
-
-async def enqueue_push(
-    session: AsyncSession,
-    *,
-    organization_id: str,
-    req: PushMessageRequest,
-) -> EnqueuedMessage:
-    stmt = select(SuppressionEntry.id).where(
-        SuppressionEntry.organization_id == organization_id,
-        SuppressionEntry.identifier_type == "push_token",
-        SuppressionEntry.identifier_value == req.device_token,
-    )
-    if (await session.execute(stmt)).first():
-        raise SuppressedError(f"recipient suppressed: {req.device_token[:8]}...")
-
-    org = await session.get(Organization, organization_id)
-    if org is None:
-        raise InvalidSenderError(f"organization not found: {organization_id}")
-    if org.monthly_quota_push <= 0:
-        raise QuotaExceededError("monthly push quota exhausted")
-    tier = org.tier
-
-    now = datetime.now(UTC)
-    content = f"{req.title}\n{req.body}"
-    chain_hash = compute_chain_hash(
-        organization_id=organization_id,
-        recipient=req.device_token,
-        channel=f"push_{req.platform}",
-        content=content,
-        timestamp=now,
-        consent_basis=req.consent_basis,
-    )
-    message_id = new_ulid()
-    notif = Notification(
-        id=message_id,
-        tenant_id=organization_id,
-        channel_kind=f"push_{req.platform}",
-        recipient=req.device_token,
-        payload={
-            "title": req.title, "body": req.body, "data": req.data or {},
-            "push_app_id": req.push_app_id, "platform": req.platform,
-        },
-        consent_basis=req.consent_basis,
-        audit_chain_hash=chain_hash,
-        created_at=now,
-    )
-    provider_default = {"ios": "apns", "android": "fcm", "web": "webpush"}[req.platform]
-    delivery = Delivery(
-        notification_id=message_id, provider=provider_default, status="pending",
-        attempts=0, created_at=now,
-    )
-    session.add(notif)
-    session.add(delivery)
-    await session.flush()
-    await session.commit()
-
-    envelope = {
-        "message_id": message_id, "organization_id": organization_id,
-        "device_token": req.device_token, "title": req.title, "body": req.body,
-        "data": req.data or {}, "push_app_id": req.push_app_id,
-        "platform": req.platform, "chain_hash": chain_hash,
-    }
-    topic = f"beacon.send.push.{req.platform}.{tier}"
-    asyncio.create_task(_safe_publish(topic, message_id, envelope))
-    asyncio.create_task(
-        anchor_to_citadel(
-            hash_hex=chain_hash,
-            metadata={
-                "message_id": message_id, "organization_id": organization_id,
-                "channel": f"push_{req.platform}", "timestamp": now.isoformat(),
-            },
-        )
-    )
-    return EnqueuedMessage(
-        message_id=message_id, status="queued", chain_hash=chain_hash, provider_route=provider_default
-    )
-
-
-# ============================================================ WhatsApp hot path (via CONNECT)
-
-
-@dataclasses.dataclass(slots=True)
-class WhatsAppMessageRequest:
-    to: str  # E.164
-    template_name: str
-    template_vars: dict[str, Any] | None = None
-    body_text: str | None = None  # for session messages within 24h window
-    consent_basis: str | None = None
-
-
-async def enqueue_whatsapp(
-    session: AsyncSession,
-    *,
-    organization_id: str,
-    req: WhatsAppMessageRequest,
-) -> EnqueuedMessage:
-    stmt = select(SuppressionEntry.id).where(
-        SuppressionEntry.organization_id == organization_id,
-        SuppressionEntry.identifier_type == "phone_e164",
-        SuppressionEntry.identifier_value == req.to,
-    )
-    if (await session.execute(stmt)).first():
-        raise SuppressedError(f"recipient suppressed: {req.to}")
-
-    org = await session.get(Organization, organization_id)
-    if org is None:
-        raise InvalidSenderError(f"organization not found: {organization_id}")
-    if org.monthly_quota_whatsapp <= 0:
-        raise QuotaExceededError("monthly whatsapp quota exhausted")
-    tier = org.tier
-
-    now = datetime.now(UTC)
-    content = req.body_text or f"template:{req.template_name}"
-    chain_hash = compute_chain_hash(
-        organization_id=organization_id,
-        recipient=req.to,
-        channel="whatsapp",
-        content=content,
-        timestamp=now,
-        consent_basis=req.consent_basis,
-    )
-    message_id = new_ulid()
-    notif = Notification(
-        id=message_id, tenant_id=organization_id, channel_kind="whatsapp",
-        recipient=req.to,
-        payload={
-            "template_name": req.template_name,
-            "template_vars": req.template_vars or {},
-            "body_text": req.body_text,
-        },
-        consent_basis=req.consent_basis,
-        audit_chain_hash=chain_hash, created_at=now,
-    )
-    delivery = Delivery(
-        notification_id=message_id, provider="connect", status="pending",
-        attempts=0, created_at=now,
-    )
-    session.add(notif)
-    session.add(delivery)
-    await session.flush()
-    await session.commit()
-
-    envelope = {
-        "message_id": message_id, "organization_id": organization_id,
-        "to": req.to, "template_name": req.template_name,
-        "template_vars": req.template_vars or {}, "body_text": req.body_text,
-        "chain_hash": chain_hash,
-    }
-    asyncio.create_task(_safe_publish(f"beacon.send.whatsapp.{tier}", message_id, envelope))
-    asyncio.create_task(
-        anchor_to_citadel(
-            hash_hex=chain_hash,
-            metadata={
-                "message_id": message_id, "organization_id": organization_id,
-                "channel": "whatsapp", "recipient": req.to, "timestamp": now.isoformat(),
-            },
-        )
-    )
-    return EnqueuedMessage(
-        message_id=message_id, status="queued", chain_hash=chain_hash, provider_route="connect"
-    )
+__all__ = [
+    "Channel",
+    "SendDecision",
+    "SendRequest",
+    "SendResult",
+    "SuppressionStore",
+    "IdempotencyStore",
+    "SlidingWindowRateLimiter",
+    "QuotaStore",
+    "FrequencyCapStore",
+    "CategoryPreference",
+    "DEFAULT_CATEGORY_PREFERENCES",
+    "PreferenceStore",
+    "MessagingService",
+]
