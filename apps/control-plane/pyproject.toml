@@ -52,6 +52,11 @@ dev = [
   "httpx>=0.27.0",
 ]
 
+[project.scripts]
+# RW-MESSAGING-14: worker entrypoint; run by a separate Deployment (worker.yaml).
+# Set MESSAGING_WORKER_CHANNEL=email|sms|push|retry + MESSAGING_DATABASE_URL.
+messaging-worker = "messaging_cp.worker_main:main"
+
 [tool.hatch.build.targets.wheel]
 # RW-MESSAGING-08: include messaging_cp so canonical /v1 surface is present
 # in the shipped wheel (both beacon legacy routes + messaging_cp canonical
