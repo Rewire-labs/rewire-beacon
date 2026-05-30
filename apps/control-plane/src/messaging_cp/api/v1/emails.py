@@ -22,6 +22,15 @@ from pydantic import BaseModel, EmailStr, Field
 from messaging_cp.adapters.email.router import EmailRouter, EmailRouterAllFailed
 from messaging_cp.credits_emit import emit_messaging_credit
 from messaging_cp.lago_emit import emit_messaging_billable
+from messaging_cp.send_guards import (
+    QuotaExceededError,
+    SuppressedError,
+    check_and_consume_quota,
+    default_idempotency_key,
+    ensure_not_suppressed,
+    idempotency_guard,
+    idempotency_store,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +80,34 @@ async def send_email(payload: EmailSendRequest, request: Request) -> EmailSendRe
             status_code=422, detail="email_requires_html_or_plain_body"
         )
     tenant_id = _tenant_id(request)
+    primary_recipient = str(payload.to[0])
+
+    # Idempotency: explicit Idempotency-Key header wins; otherwise a
+    # deterministic default key dedups identical sends within the same day.
+    idem_key = request.headers.get("Idempotency-Key") or default_idempotency_key(
+        tenant_id, "email", primary_recipient, payload.template_id
+    )
+    cached = await idempotency_guard(idem_key)
+    if cached is not None:
+        return EmailSendResponse(**cached)
+
+    # Cross-channel suppression (LGPD opt-out) for every recipient.
+    try:
+        for addr in payload.to:
+            await ensure_not_suppressed(tenant_id, str(addr))
+    except SuppressedError as exc:
+        raise HTTPException(
+            status_code=409, detail={"error": "recipient_suppressed", "message": str(exc)}
+        ) from exc
+
+    # Per-tenant quota (decremented atomically).
+    try:
+        await check_and_consume_quota(tenant_id, "email")
+    except QuotaExceededError as exc:
+        raise HTTPException(
+            status_code=429, detail={"error": "quota_exceeded", "message": str(exc)}
+        ) from exc
+
     try:
         res = await _email_router.send(
             sender=str(payload.sender),
@@ -98,9 +135,11 @@ async def send_email(payload: EmailSendRequest, request: Request) -> EmailSendRe
         metadata={"provider": res.provider},
     )
 
-    return EmailSendResponse(
+    response = EmailSendResponse(
         message_id=res.message_id, status=res.status, provider=res.provider
     )
+    await idempotency_store(idem_key, response.model_dump())
+    return response
 
 
 @router.get("/{message_id}", summary="Get email delivery status")

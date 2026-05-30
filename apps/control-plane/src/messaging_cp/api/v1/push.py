@@ -15,6 +15,15 @@ from messaging_cp.adapters.push.router import (
 )
 from messaging_cp.credits_emit import emit_messaging_credit
 from messaging_cp.lago_emit import emit_messaging_billable
+from messaging_cp.send_guards import (
+    QuotaExceededError,
+    SuppressedError,
+    check_and_consume_quota,
+    default_idempotency_key,
+    ensure_not_suppressed,
+    idempotency_guard,
+    idempotency_store,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +73,27 @@ def _tenant_id(request: Request) -> str:
 )
 async def send_push(payload: PushSendRequest, request: Request) -> PushSendResponse:
     tenant_id = _tenant_id(request)
+
+    idem_key = request.headers.get("Idempotency-Key") or default_idempotency_key(
+        tenant_id, "push", payload.device_token, payload.push_app_id
+    )
+    cached = await idempotency_guard(idem_key)
+    if cached is not None:
+        return PushSendResponse(**cached)
+
+    try:
+        await ensure_not_suppressed(tenant_id, payload.device_token)
+    except SuppressedError as exc:
+        raise HTTPException(
+            status_code=409, detail={"error": "recipient_suppressed", "message": str(exc)}
+        ) from exc
+    try:
+        await check_and_consume_quota(tenant_id, "push")
+    except QuotaExceededError as exc:
+        raise HTTPException(
+            status_code=429, detail={"error": "quota_exceeded", "message": str(exc)}
+        ) from exc
+
     try:
         res = await _push_router.send(
             platform=payload.platform,
@@ -106,12 +136,14 @@ async def send_push(payload: PushSendRequest, request: Request) -> PushSendRespo
         metadata={"provider": res.provider, "platform": res.platform},
     )
 
-    return PushSendResponse(
+    response = PushSendResponse(
         message_id=res.message_id,
         status=res.status,
         provider=res.provider,
         platform=res.platform,
     )
+    await idempotency_store(idem_key, response.model_dump())
+    return response
 
 
 @router.get("/{message_id}", summary="Get push delivery status")
