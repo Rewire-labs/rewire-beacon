@@ -74,17 +74,26 @@ async def worker_session() -> AsyncIterator[AsyncSession]:
 async def tenant_scoped_session(organization_id: str) -> AsyncIterator[AsyncSession]:
     """Open a session with `beacon.current_org_id` GUC set (RLS-bound).
 
-    Postgres-only — SQLite (dev fallback) silently no-ops on SET LOCAL.
+    The GUC MUST be set successfully on Postgres — otherwise the RLS policy
+    (now fail-closed per migration 0006) would silently expose zero rows OR,
+    worse on a misconfigured DB, the session would run unscoped. We therefore
+    raise if ``set_config`` fails on a Postgres backend, and only no-op on
+    SQLite (dev fallback), which has no ``set_config``/RLS.
     """
     async with app_session() as session:
-        # SET LOCAL applies until COMMIT/ROLLBACK; safe per-request.
-        try:
-            await session.execute(
-                text("SELECT set_config('beacon.current_org_id', :v, true)").bindparams(v=organization_id)
+        dialect = session.bind.dialect.name if session.bind is not None else ""
+        if dialect == "sqlite":
+            # SQLite dev fallback has no RLS — nothing to scope.
+            yield session
+            return
+        # SET LOCAL applies until COMMIT/ROLLBACK; safe per-request. A failure
+        # here is fatal: do NOT swallow it (the old bare except let a failed
+        # SET continue with an empty GUC = potential cross-tenant read).
+        await session.execute(
+            text("SELECT set_config('beacon.current_org_id', :v, true)").bindparams(
+                v=organization_id
             )
-        except Exception:
-            # SQLite or pre-migration DB — skip silently.
-            pass
+        )
         yield session
 
 

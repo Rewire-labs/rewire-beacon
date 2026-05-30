@@ -95,3 +95,46 @@ async def test_rls_blocks_cross_tenant_select(two_orgs, schema, table, extra_col
     async with worker_session() as s:
         await s.execute(text(f"DELETE FROM {schema}.{table} WHERE id = :id").bindparams(id=row_id))
         await s.commit()
+
+
+@pytest.mark.asyncio
+async def test_rls_fail_closed_without_guc(two_orgs) -> None:
+    """RW-MESSAGING-03: a session with NO GUC set must see ZERO rows.
+
+    The old 0003 policy exposed ALL rows when the GUC was empty; 0006 makes it
+    fail-closed. We insert a row via the BYPASSRLS worker role, then read it
+    back through a plain RLS-bound ``app_session`` (no SET GUC) and assert it
+    is invisible.
+    """
+    from sqlalchemy import text
+
+    from beacon.db.session import app_session, worker_session
+
+    org_a, _org_b = two_orgs
+    row_id = str(uuid.uuid4())
+    async with worker_session() as s:
+        await s.execute(
+            text(
+                "INSERT INTO senders.email_domains (id, organization_id, domain) "
+                "VALUES (:id, :org, :dom)"
+            ).bindparams(id=row_id, org=org_a, dom="failclosed.test")
+        )
+        await s.commit()
+    try:
+        async with app_session() as s:
+            result = await s.execute(
+                text("SELECT id FROM senders.email_domains WHERE id = :id").bindparams(
+                    id=row_id
+                )
+            )
+            assert result.first() is None, (
+                "RLS NOT fail-closed: empty GUC exposed a row (0003 bypass regression)"
+            )
+    finally:
+        async with worker_session() as s:
+            await s.execute(
+                text("DELETE FROM senders.email_domains WHERE id = :id").bindparams(
+                    id=row_id
+                )
+            )
+            await s.commit()
