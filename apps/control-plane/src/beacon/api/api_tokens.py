@@ -91,7 +91,7 @@ async def list_tokens(request: Request) -> list[TokenSummary]:
     ]
 
 
-@router.delete("/{token_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{token_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 async def revoke_token(token_id: str, request: Request) -> None:
     org_id = _require_org(request)
     async with tenant_scoped_session(org_id) as session:

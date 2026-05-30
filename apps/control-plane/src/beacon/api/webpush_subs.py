@@ -90,7 +90,7 @@ async def create_subscription(payload: WebPushSubscription, request: Request) ->
     return WebPushSubOut(id=sub_id, endpoint=payload.endpoint, created_at=datetime.utcnow())
 
 
-@router.delete("/subscriptions/{sub_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/subscriptions/{sub_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 async def delete_subscription(sub_id: str, request: Request) -> None:
     org_id = _require_org(request)
     from sqlalchemy import text as sql_text

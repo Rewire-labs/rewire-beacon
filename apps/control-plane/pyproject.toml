@@ -32,6 +32,12 @@ dependencies = [
   "jsonschema>=4.22.0",
   # BCN-101: cross-agent RabbitMQ bus.
   "aio-pika>=9.4.0",
+  # RW-MESSAGING-02/07: real JWT signature validation (ADR0046) via
+  # rewire_shared.auth_client.AuthentikJWTValidator — RS256 over JWKS with
+  # algorithm pinning (PyJWT, CVE-2024-33663/33664 safe).
+  "pyjwt[crypto]>=2.9.0",
+  "cryptography>=42.0",
+  "rewire-shared>=0.3.0",
 ]
 
 [project.optional-dependencies]
@@ -46,3 +52,10 @@ dev = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/beacon"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+markers = [
+  "unit: fast, isolated unit tests",
+]

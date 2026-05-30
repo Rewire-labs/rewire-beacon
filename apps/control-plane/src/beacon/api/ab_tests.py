@@ -291,7 +291,7 @@ async def assign_variant(
     )
 
 
-@router.post("/{test_id}/event", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/{test_id}/event", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 async def record_event(
     test_id: str, payload: AbEventRequest, request: Request
 ) -> None:

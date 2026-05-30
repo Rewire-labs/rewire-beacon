@@ -45,6 +45,18 @@ class Settings(BaseSettings):
     oidc_issuer: str = "https://auth.rewirelabs.dev/application/o/beacon/"
     oidc_client_id: str = "beacon"
     oidc_client_secret: str = "dev-only-not-prod"  # noqa: S105 — dev fallback
+    # JWKS endpoint for RS256 signature validation (ADR0046). Empty default ->
+    # derived from oidc_issuer via well-known discovery suffix.
+    oidc_jwks_uri: str = ""
+    # Expected `aud` claim for UI/SDK tokens (Authentik client_id by default).
+    oidc_audience: str = "beacon"
+    # Dev/test ONLY: shared HS256 secret to accept symmetric tokens without a
+    # live Authentik/JWKS. MUST be empty in prod (ExternalSecret never sets it).
+    oidc_dev_hs256_secret: str = ""
+
+    # -- Inter-agent (INTER_AGENT_COMM_SPEC §1.2) -------------------------
+    agent_audience: str = "agents.rewire.svc"
+    agent_jwks_uri: str = ""
 
     # -- Cross-product ----------------------------------------------------
     connect_internal_base_url: str = "http://connect.connect.svc.cluster.local:8080"

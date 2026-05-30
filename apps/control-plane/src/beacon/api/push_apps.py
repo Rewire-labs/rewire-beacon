@@ -91,7 +91,7 @@ async def list_push_apps(request: Request) -> list[PushAppOut]:
     return [_to_out(r) for r in rows]
 
 
-@router.delete("/{app_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{app_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 async def delete_push_app(app_id: str, request: Request) -> None:
     org_id = _require_org(request)
     async with tenant_scoped_session(org_id) as session:

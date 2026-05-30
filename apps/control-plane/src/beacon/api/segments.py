@@ -181,7 +181,7 @@ async def update_segment(
     return _to_out(updated)
 
 
-@router.delete("/{segment_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{segment_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 async def delete_segment(segment_id: str, request: Request) -> None:
     org_id = _require_org(request)
     s = _STORE.get(segment_id)

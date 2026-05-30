@@ -2,7 +2,12 @@
 
 JWT path:
   Authorization: Bearer eyJhbG...
-  Validates issuer matches BEACON_OIDC_ISSUER, exp, signature via JWKS cache.
+  Validates issuer (``BEACON_OIDC_ISSUER``), audience (``BEACON_OIDC_AUDIENCE``),
+  ``exp`` AND the cryptographic signature via the JWKS published by Authentik
+  (``rewire_shared.auth_client.AuthentikJWTValidator``, ADR0046 — RS256 with
+  algorithm pinning; CVE-2024-33663/33664 safe). A dev-only HS256 escape hatch
+  (``BEACON_OIDC_DEV_HS256_SECRET``) exists for tests/compose and MUST stay
+  empty in prod.
 
 API token path:
   Authorization: Bearer bcn_live_<32 random url-safe>
@@ -13,23 +18,20 @@ Skip paths: /healthz, /ready, /metrics, /docs, /redoc, /openapi.json, /v1/webhoo
 """
 from __future__ import annotations
 
-import base64
 import dataclasses
 import hashlib
 import hmac
-import json
 import logging
 import time
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-import httpx
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.types import ASGIApp
 
-from beacon.settings import get_settings
+from beacon.settings import Settings, get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -66,66 +68,49 @@ class AuthPrincipal:
     raw_token: str | None = None
 
 
-class _JwksCache:
-    """In-process JWKS cache (5 min TTL)."""
+def _derive_jwks_uri(issuer: str, explicit: str) -> str:
+    """Resolve the JWKS endpoint, preferring the explicit setting.
 
-    def __init__(self, ttl_seconds: int = 300) -> None:
-        self._ttl = ttl_seconds
-        self._fetched_at: float = 0.0
-        self._jwks: dict[str, Any] | None = None
-        self._oidc_config: dict[str, Any] | None = None
-
-    async def get(self, oidc_issuer: str) -> dict[str, Any]:
-        now = time.time()
-        if self._jwks and (now - self._fetched_at) < self._ttl:
-            return self._jwks
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            cfg = await client.get(oidc_issuer.rstrip("/") + "/.well-known/openid-configuration")
-            cfg.raise_for_status()
-            self._oidc_config = cfg.json()
-            jwks_uri = self._oidc_config["jwks_uri"]
-            jwks_resp = await client.get(jwks_uri)
-            jwks_resp.raise_for_status()
-            self._jwks = jwks_resp.json()
-        self._fetched_at = now
-        return self._jwks
-
-
-_JWKS = _JwksCache()
-
-
-def _b64url_decode(data: str) -> bytes:
-    pad = 4 - (len(data) % 4)
-    if pad < 4:
-        data += "=" * pad
-    return base64.urlsafe_b64decode(data.encode("ascii"))
-
-
-def _verify_jwt_minimal(token: str, issuer_expected: str) -> dict[str, Any]:
-    """Minimal JWT validation without PyJWT dep.
-
-    Validates: header alg present, payload iss matches, exp not expired.
-    Signature validation is best-effort: HS256 supported inline, RS256 falls
-    back to acceptance when jwks is unreachable in dev. Production should
-    install `pyjwt[crypto]` and replace this with `jwt.decode(... algorithms=[...])`.
+    Authentik exposes JWKS at ``<issuer>/jwks/`` (path-style issuer). When the
+    operator provides ``BEACON_OIDC_JWKS_URI`` we honour it verbatim.
     """
-    parts = token.split(".")
-    if len(parts) != 3:
-        raise ValueError("malformed jwt")
-    header_b, payload_b, _sig_b = parts
-    header = json.loads(_b64url_decode(header_b))
-    payload = json.loads(_b64url_decode(payload_b))
-    if header.get("alg") not in ("RS256", "HS256", "ES256"):
-        raise ValueError(f"unsupported alg: {header.get('alg')}")
-    iss = payload.get("iss", "")
-    if not iss.startswith(issuer_expected.rstrip("/").split("/application/")[0]):
-        # Allow Authentik path-style issuer match.
-        if iss.rstrip("/") != issuer_expected.rstrip("/"):
-            raise ValueError(f"iss mismatch: {iss}")
-    exp = payload.get("exp", 0)
-    if exp and exp < int(time.time()):
-        raise ValueError("token expired")
-    return payload
+    if explicit:
+        return explicit
+    return issuer.rstrip("/") + "/jwks/"
+
+
+_VALIDATOR: Any = None
+_VALIDATOR_KEY: tuple[str, str, str, str] | None = None
+
+
+def _get_jwt_validator(settings: Settings) -> Any:
+    """Lazily build (and cache) the AuthentikJWTValidator from settings.
+
+    Cached on the (issuer, jwks_uri, audience, dev_secret) tuple so a settings
+    change (e.g. in tests) rebuilds the validator and its JWKS cache.
+    """
+    global _VALIDATOR, _VALIDATOR_KEY
+    from rewire_shared.auth_client import AuthentikJWTValidator
+
+    jwks_uri = _derive_jwks_uri(settings.oidc_issuer, settings.oidc_jwks_uri)
+    dev_secret = settings.oidc_dev_hs256_secret or None
+    key = (settings.oidc_issuer, jwks_uri, settings.oidc_audience, dev_secret or "")
+    if _VALIDATOR is None or _VALIDATOR_KEY != key:
+        _VALIDATOR = AuthentikJWTValidator(
+            issuer=settings.oidc_issuer,
+            jwks_uri=jwks_uri,
+            audience=settings.oidc_audience,
+            dev_hs256_secret=dev_secret,
+        )
+        _VALIDATOR_KEY = key
+    return _VALIDATOR
+
+
+def _reset_jwt_validator() -> None:
+    """Test hook: drop the cached validator so new settings take effect."""
+    global _VALIDATOR, _VALIDATOR_KEY
+    _VALIDATOR = None
+    _VALIDATOR_KEY = None
 
 
 def hash_api_token(raw_token: str, salt: str = "beacon-v1") -> str:
@@ -203,14 +188,21 @@ class AuthMiddleware(BaseHTTPMiddleware):
             if principal is None:
                 return JSONResponse({"error": "invalid_api_token"}, status_code=401)
         else:
-            # JWT path.
+            # JWT path — full signature + iss + aud + exp validation via JWKS.
             try:
-                payload = _verify_jwt_minimal(token, self._settings.oidc_issuer)
+                validator = _get_jwt_validator(self._settings)
+                payload = await validator.validate_payload(token)
             except Exception as exc:  # noqa: BLE001 — return 401 on any issue
                 logger.info("jwt validation failed: %s", exc)
                 return JSONResponse({"error": "invalid_jwt", "detail": str(exc)}, status_code=401)
-            # Org id can come from custom claim `org_id` or X-Organization-Id header.
-            org_id = payload.get("org_id") or request.headers.get("X-Organization-Id")
+            # Org id can come from custom claim `org_id`/`organization_id`. The
+            # X-Organization-Id header is only honoured as a fallback when the
+            # token carries no org claim (header alone can never authenticate).
+            org_id = (
+                payload.get("org_id")
+                or payload.get("organization_id")
+                or request.headers.get("X-Organization-Id")
+            )
             scopes_str: str = payload.get("scope", "messages:write")
             principal = AuthPrincipal(
                 kind="jwt",
@@ -219,6 +211,10 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 scopes=tuple(scopes_str.split()),
                 email=payload.get("email"),
             )
+            # Expose the verified claims for downstream handlers (RW-MESSAGING-07
+            # agent invoke relies on request.state.claims being set only after a
+            # real signature check).
+            request.state.claims = payload
 
         request.state.principal = principal
         return await call_next(request)
