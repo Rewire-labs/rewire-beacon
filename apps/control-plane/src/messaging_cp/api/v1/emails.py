@@ -142,12 +142,24 @@ async def send_email(payload: EmailSendRequest, request: Request) -> EmailSendRe
     return response
 
 
-@router.get("/{message_id}", summary="Get email delivery status")
-async def get_email_status(message_id: str, request: Request) -> dict[str, Any]:
+@router.get(
+    "/{message_id}",
+    status_code=status.HTTP_501_NOT_IMPLEMENTED,
+    summary="Get email delivery status [deferred V0.6]",
+    response_model=None,
+)
+async def get_email_status(message_id: str, request: Request) -> Any:
+    # RW-MESSAGING-20: explicit 501 — lookup from beacon.deliveries deferred V0.6.
     _tenant_id(request)
-    # Delegate to legacy delivery lookup. V0.1+: implement real lookup from
-    # ``beacon.deliveries`` table.
-    return {"message_id": message_id, "status": "unknown", "lookup": "not_implemented_v0"}
+    raise HTTPException(
+        status_code=501,
+        detail={
+            "code": "email_status_not_implemented_v0",
+            "message": "Email delivery status lookup deferred to V0.6 (beacon.deliveries table).",
+            "deferred_to": "V0.6",
+            "message_id": message_id,
+        },
+    )
 
 
 __all__ = ["router"]

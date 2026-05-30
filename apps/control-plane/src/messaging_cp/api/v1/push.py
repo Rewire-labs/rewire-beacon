@@ -146,10 +146,24 @@ async def send_push(payload: PushSendRequest, request: Request) -> PushSendRespo
     return response
 
 
-@router.get("/{message_id}", summary="Get push delivery status")
-async def get_push_status(message_id: str, request: Request) -> dict[str, Any]:
+@router.get(
+    "/{message_id}",
+    status_code=status.HTTP_501_NOT_IMPLEMENTED,
+    summary="Get push delivery status [deferred V0.6]",
+    response_model=None,
+)
+async def get_push_status(message_id: str, request: Request) -> Any:
+    # RW-MESSAGING-20: explicit 501 — lookup from beacon.deliveries deferred V0.6.
     _tenant_id(request)
-    return {"message_id": message_id, "status": "unknown", "lookup": "not_implemented_v0"}
+    raise HTTPException(
+        status_code=501,
+        detail={
+            "code": "push_status_not_implemented_v0",
+            "message": "Push delivery status lookup deferred to V0.6 (beacon.deliveries table).",
+            "deferred_to": "V0.6",
+            "message_id": message_id,
+        },
+    )
 
 
 @router.post(
