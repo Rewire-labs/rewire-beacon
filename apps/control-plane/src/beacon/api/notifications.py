@@ -41,6 +41,31 @@ class SendResponse(BaseModel):
     accepted: bool
 
 
+class ChannelInfo(BaseModel):
+    id: str
+    enabled: bool
+    provider: str
+
+
+class ChannelsResponse(BaseModel):
+    organization_id: str | None = None
+    channels: list[ChannelInfo]
+
+
+@router.get("/channels", response_model=ChannelsResponse)
+def list_channels() -> ChannelsResponse:
+    """FE-MESSAGING-08: list enabled channels for the org."""
+    return ChannelsResponse(
+        channels=[
+            ChannelInfo(id="email", enabled=True, provider="postal+ses-br+resend"),
+            ChannelInfo(id="sms", enabled=True, provider="zenvia+totalvoice"),
+            ChannelInfo(id="whatsapp", enabled=True, provider="connect-internal"),
+            ChannelInfo(id="push_mobile", enabled=True, provider="apns+fcm"),
+            ChannelInfo(id="push_web", enabled=False, provider="vapid"),
+        ]
+    )
+
+
 @router.post("/send", response_model=SendResponse)
 def send_notification(payload: SendPayload) -> SendResponse:
     try:

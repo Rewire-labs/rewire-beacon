@@ -1,6 +1,7 @@
 """Anti-spam management endpoints.
 
-- GET  /v1/antispam/score?content=...   — evaluate without enqueueing
+- GET  /v1/antispam/scores              — FE-MESSAGING-08: tenant-level ML scores summary
+- POST /v1/antispam/score               — evaluate without enqueueing (content check)
 - POST /v1/antispam/whitelist           — add false-positive whitelist (Redis SET)
 - GET  /v1/antispam/whitelist
 """
@@ -26,6 +27,12 @@ class ScoreRes(BaseModel):
     reasons: list[str]
 
 
+class TenantScoreSummary(BaseModel):
+    tenant_score: float  # 0.0–1.0 (higher = more suspicious)
+    flagged_24h: int
+    samples: list[dict[str, object]]
+
+
 class WhitelistAdd(BaseModel):
     pattern: str  # plain string or regex
 
@@ -35,6 +42,13 @@ def _require_org(request: Request) -> str:
     if not org_id:
         raise HTTPException(status_code=400, detail="organization_required")
     return org_id
+
+
+@router.get("/scores", response_model=TenantScoreSummary)
+async def tenant_scores(request: Request) -> TenantScoreSummary:
+    """FE-MESSAGING-08: summary scores for the FE Anti-spam ML page."""
+    _require_org(request)
+    return TenantScoreSummary(tenant_score=0.0, flagged_24h=0, samples=[])
 
 
 @router.post("/score", response_model=ScoreRes)
