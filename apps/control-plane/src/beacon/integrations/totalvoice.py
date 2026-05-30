@@ -38,7 +38,7 @@ class TotalVoiceClient:
             "Access-Token": self.api_token,
             "Content-Type": "application/json",
             "Accept": "application/json",
-            "User-Agent": "rewire-beacon/0.1",
+            "User-Agent": "rewire-messaging/0.1",
         }
 
     async def send_sms(

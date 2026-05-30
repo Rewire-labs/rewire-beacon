@@ -54,7 +54,7 @@ class ConnectClient:
             resp = await client.post(
                 f"{self.base_url}/connect/internal/v1/whatsapp/send",
                 json=payload,
-                headers={"X-Source-Service": "rewire-beacon"},
+                headers={"X-Source-Service": "rewire-messaging"},
             )
         if resp.status_code >= 400:
             raise ConnectError(f"connect send failed [{resp.status_code}]: {resp.text}")
@@ -71,7 +71,7 @@ class ConnectClient:
             resp = await client.get(
                 f"{self.base_url}/connect/internal/v1/whatsapp/templates",
                 params={"organization_id": organization_id},
-                headers={"X-Source-Service": "rewire-beacon"},
+                headers={"X-Source-Service": "rewire-messaging"},
             )
         if resp.status_code >= 400:
             raise ConnectError(f"connect list templates failed: {resp.text}")

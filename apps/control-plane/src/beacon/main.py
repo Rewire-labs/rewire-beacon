@@ -64,7 +64,9 @@ async def _aggregator_invalidate(logger_: structlog.stdlib.BoundLogger) -> None:
         async with _httpx.AsyncClient(timeout=2.0) as ac:
             await ac.post(
                 f"{base}/aggregator/invalidate",
-                json={"service": "rewire-beacon", "reason": "deploy"},
+                # RW-MESSAGING-10: canonical slug is rewire-messaging.
+                # Legacy rewire-beacon accepted by aggregator for 90d alias window.
+                json={"service": "rewire-messaging", "reason": "deploy"},
             )
         logger_.info("capability_registry.aggregator_invalidated")
     except Exception as exc:  # noqa: BLE001
@@ -110,8 +112,9 @@ def create_app() -> FastAPI:
     """FastAPI factory — used by uvicorn and tests."""
     s = get_settings()
     app = FastAPI(
-        title="rewire-beacon",
-        description="Rewire BEACON — Notification platform multi-canal BR (V0 skeleton)",
+        # RW-MESSAGING-10: canonical title is rewire-messaging.
+        title="rewire-messaging",
+        description="Rewire MESSAGING — Notification platform multi-canal BR (V0)",
         version=s.service_version,
         lifespan=lifespan,
         openapi_url="/openapi.json",
@@ -127,9 +130,43 @@ def create_app() -> FastAPI:
 
     @app.get("/ready", tags=["health"], include_in_schema=True)
     async def ready() -> JSONResponse:
-        # V0: nao temos DB/Redis/Kafka connect — ready = healthz.
-        # V0.2: validar Postgres pool + Redis ping + Kafka producer.
-        return JSONResponse({"status": "ready", "service": s.service_name})
+        # RW-MESSAGING-13: real readiness — DB + Redis bounded checks (≤2s).
+        # Returns 503 when any critical dependency is unreachable so K8s
+        # withholds traffic until the pod is genuinely healthy.
+        checks: dict[str, str] = {}
+        failed = False
+
+        # Postgres check
+        try:
+            from beacon.db.session import get_engine
+            from sqlalchemy import text as _text
+            engine = get_engine()
+            async with engine.connect() as conn:
+                await conn.execute(_text("SELECT 1"))
+            checks["postgres"] = "ok"
+        except Exception as exc:  # noqa: BLE001
+            checks["postgres"] = f"error: {exc}"
+            failed = True
+
+        # Redis check
+        try:
+            import redis.asyncio as _aioredis
+            _redis = _aioredis.from_url(s.redis_url, socket_connect_timeout=2)
+            await _redis.ping()
+            await _redis.aclose()
+            checks["redis"] = "ok"
+        except Exception as exc:  # noqa: BLE001
+            checks["redis"] = f"error: {exc}"
+            failed = True
+
+        if failed:
+            return JSONResponse(
+                {"status": "not_ready", "service": s.service_name, "checks": checks},
+                status_code=503,
+            )
+        return JSONResponse(
+            {"status": "ready", "service": s.service_name, "checks": checks}
+        )
 
     @app.get("/metrics", include_in_schema=False)
     async def metrics() -> PlainTextResponse:

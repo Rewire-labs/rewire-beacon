@@ -219,7 +219,18 @@ async def list_messages(
 # Registry — capability_id -> handler
 # ---------------------------------------------------------------------------
 
+# RW-MESSAGING-10: canonical capability_id prefix is rewire.messaging.*
+# Legacy rewire.beacon.* aliases kept for 90d migration window so existing
+# agent callers (rewire-nova, rewire-admin) don't break on upgrade.
 HANDLERS: dict[str, Handler] = {
+    # Canonical (new)
+    "rewire.messaging.send_email": send_email,
+    "rewire.messaging.send_sms": send_sms,
+    "rewire.messaging.send_whatsapp": send_whatsapp,
+    "rewire.messaging.add_suppression": add_suppression,
+    "rewire.messaging.check_suppression": check_suppression,
+    "rewire.messaging.list_messages": list_messages,
+    # Legacy aliases (90d deprecation window — remove after 2026-08-28)
     "rewire.beacon.send_email": send_email,
     "rewire.beacon.send_sms": send_sms,
     "rewire.beacon.send_whatsapp": send_whatsapp,
