@@ -1,384 +1,291 @@
-// BEACON API client — minimal fetch wrapper.
-// Auto-attaches Authorization (JWT or API token) and X-Organization-Id headers.
-// 401 -> redirect to /login.
+// Beacon UI API client
+//
+// RW-FE-MESSAGING-02: authentication is Authentik OIDC (Authorization Code +
+// PKCE), NOT a custom localStorage bearer token. Every request carries the
+// standard Rewire headers: Authorization, X-Rewire-Audit, X-Rewire-MFA and
+// Accept-Language.
+//
+// This module is framework-agnostic (no React imports) so it can be unit
+// type-checked and reused by any caller.
 
-export const API_BASE = import.meta.env.VITE_BEACON_API_BASE || "/v1";
-
-type Token = string | null;
-
-function getAuthToken(): Token {
-  // Persisted by login flow; harmless if missing in mock dev.
-  return localStorage.getItem("beacon_token");
+// --------------------------------------------------------------------------- //
+// Config
+// --------------------------------------------------------------------------- //
+export interface OidcConfig {
+  authority: string; // Authentik issuer, e.g. https://auth.rewirelabs.dev/application/o/beacon/
+  clientId: string;
+  redirectUri: string;
+  scope: string;
 }
 
-function getOrgId(): string | null {
-  return localStorage.getItem("beacon_org_id");
+export interface ApiConfig {
+  baseUrl: string;
+  oidc: OidcConfig;
 }
 
-export interface RequestOpts extends Omit<RequestInit, "body"> {
-  body?: unknown;
-  skipOrgHeader?: boolean;
+declare const importMetaEnv: Record<string, string | undefined>;
+
+function env(key: string, fallback = ""): string {
+  // Vite exposes import.meta.env; fall back gracefully when bundler injects it.
+  const meta = (globalThis as { __BEACON_ENV__?: Record<string, string> })
+    .__BEACON_ENV__;
+  const value = meta ? meta[key] : undefined;
+  return value ?? fallback;
 }
 
-export class ApiError extends Error {
-  constructor(public status: number, public detail: unknown) {
-    super(typeof detail === "string" ? detail : `API error ${status}`);
-  }
+export const apiConfig: ApiConfig = {
+  baseUrl: env("VITE_BEACON_API", "/api"),
+  oidc: {
+    authority: env(
+      "VITE_OIDC_AUTHORITY",
+      "https://auth.rewirelabs.dev/application/o/beacon/",
+    ),
+    clientId: env("VITE_OIDC_CLIENT_ID", "beacon-ui"),
+    redirectUri: env("VITE_OIDC_REDIRECT", `${location.origin}/auth/callback`),
+    scope: "openid profile email offline_access",
+  },
+};
+
+// --------------------------------------------------------------------------- //
+// Token storage — short-lived access token kept in memory; refresh token in
+// sessionStorage (cleared on tab close). We deliberately avoid persisting the
+// access token in localStorage.
+// --------------------------------------------------------------------------- //
+export interface TokenSet {
+  accessToken: string;
+  refreshToken?: string;
+  expiresAt: number; // epoch ms
+  idToken?: string;
 }
 
-export async function api<T = unknown>(path: string, opts: RequestOpts = {}): Promise<T> {
-  const headers: Record<string, string> = {
-    "Accept": "application/json",
-    ...(opts.headers as Record<string, string> | undefined),
+const REFRESH_KEY = "beacon.oidc.refresh";
+let memoryTokens: TokenSet | null = null;
+
+export function setTokens(t: TokenSet): void {
+  memoryTokens = t;
+  if (t.refreshToken) sessionStorage.setItem(REFRESH_KEY, t.refreshToken);
+}
+
+export function clearTokens(): void {
+  memoryTokens = null;
+  sessionStorage.removeItem(REFRESH_KEY);
+}
+
+export function isAuthenticated(): boolean {
+  return !!memoryTokens && memoryTokens.expiresAt > Date.now();
+}
+
+// --------------------------------------------------------------------------- //
+// PKCE helpers
+// --------------------------------------------------------------------------- //
+function base64UrlEncode(bytes: ArrayBuffer): string {
+  const arr = new Uint8Array(bytes);
+  let str = "";
+  for (let i = 0; i < arr.length; i++) str += String.fromCharCode(arr[i]);
+  return btoa(str).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function randomString(len = 64): string {
+  const bytes = new Uint8Array(len);
+  crypto.getRandomValues(bytes);
+  return base64UrlEncode(bytes.buffer);
+}
+
+async function sha256(input: string): Promise<ArrayBuffer> {
+  return crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
+}
+
+const PKCE_VERIFIER_KEY = "beacon.pkce.verifier";
+const PKCE_STATE_KEY = "beacon.pkce.state";
+
+// Kick off the OIDC Authorization Code + PKCE flow (redirects the browser).
+export async function login(): Promise<void> {
+  const verifier = randomString(64);
+  const state = randomString(16);
+  const challenge = base64UrlEncode(await sha256(verifier));
+  sessionStorage.setItem(PKCE_VERIFIER_KEY, verifier);
+  sessionStorage.setItem(PKCE_STATE_KEY, state);
+
+  const u = new URL(`${apiConfig.oidc.authority}authorize/`);
+  u.searchParams.set("response_type", "code");
+  u.searchParams.set("client_id", apiConfig.oidc.clientId);
+  u.searchParams.set("redirect_uri", apiConfig.oidc.redirectUri);
+  u.searchParams.set("scope", apiConfig.oidc.scope);
+  u.searchParams.set("state", state);
+  u.searchParams.set("code_challenge", challenge);
+  u.searchParams.set("code_challenge_method", "S256");
+  location.assign(u.toString());
+}
+
+interface TokenResponse {
+  access_token: string;
+  refresh_token?: string;
+  id_token?: string;
+  expires_in: number;
+}
+
+function ingestTokenResponse(r: TokenResponse): TokenSet {
+  const tokens: TokenSet = {
+    accessToken: r.access_token,
+    refreshToken: r.refresh_token,
+    idToken: r.id_token,
+    expiresAt: Date.now() + r.expires_in * 1000,
   };
-  const token = getAuthToken();
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  const orgId = getOrgId();
-  if (orgId && !opts.skipOrgHeader) headers["X-Organization-Id"] = orgId;
+  setTokens(tokens);
+  return tokens;
+}
 
-  const init: RequestInit = { ...opts, headers };
-  if (opts.body !== undefined) {
-    headers["Content-Type"] = "application/json";
-    init.body = JSON.stringify(opts.body);
-  }
+// Complete the flow at the /auth/callback route.
+export async function handleCallback(search: string): Promise<TokenSet> {
+  const params = new URLSearchParams(search);
+  const code = params.get("code");
+  const state = params.get("state");
+  const expectedState = sessionStorage.getItem(PKCE_STATE_KEY);
+  const verifier = sessionStorage.getItem(PKCE_VERIFIER_KEY);
+  if (!code) throw new Error("missing authorization code");
+  if (!state || state !== expectedState) throw new Error("OIDC state mismatch");
+  if (!verifier) throw new Error("missing PKCE verifier");
 
-  const resp = await fetch(`${API_BASE}${path}`, init);
-  if (resp.status === 401) {
-    // Soft redirect — keeps SPA navigation cheap.
-    if (typeof window !== "undefined" && window.location.pathname !== "/login") {
-      window.location.href = "/login";
-    }
-    throw new ApiError(401, "unauthenticated");
-  }
-  const text = await resp.text();
-  let parsed: unknown = null;
-  if (text) {
-    try {
-      parsed = JSON.parse(text);
-    } catch {
-      parsed = text;
-    }
-  }
+  const body = new URLSearchParams({
+    grant_type: "authorization_code",
+    code,
+    redirect_uri: apiConfig.oidc.redirectUri,
+    client_id: apiConfig.oidc.clientId,
+    code_verifier: verifier,
+  });
+  const resp = await fetch(`${apiConfig.oidc.authority}token/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body,
+  });
+  if (!resp.ok) throw new Error(`token exchange failed: ${resp.status}`);
+  sessionStorage.removeItem(PKCE_VERIFIER_KEY);
+  sessionStorage.removeItem(PKCE_STATE_KEY);
+  return ingestTokenResponse((await resp.json()) as TokenResponse);
+}
+
+async function refresh(): Promise<TokenSet | null> {
+  const rt = sessionStorage.getItem(REFRESH_KEY);
+  if (!rt) return null;
+  const body = new URLSearchParams({
+    grant_type: "refresh_token",
+    refresh_token: rt,
+    client_id: apiConfig.oidc.clientId,
+  });
+  const resp = await fetch(`${apiConfig.oidc.authority}token/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body,
+  });
   if (!resp.ok) {
-    throw new ApiError(resp.status, parsed);
+    clearTokens();
+    return null;
+  }
+  return ingestTokenResponse((await resp.json()) as TokenResponse);
+}
+
+async function validAccessToken(): Promise<string | null> {
+  if (memoryTokens && memoryTokens.expiresAt > Date.now() + 5000) {
+    return memoryTokens.accessToken;
+  }
+  const refreshed = await refresh();
+  return refreshed?.accessToken ?? null;
+}
+
+// --------------------------------------------------------------------------- //
+// MFA / audit context — populated by the auth context after step-up.
+// --------------------------------------------------------------------------- //
+let mfaLevel = "none"; // "none" | "totp" | "webauthn"
+export function setMfaLevel(level: string): void {
+  mfaLevel = level;
+}
+
+function auditId(): string {
+  return randomString(12);
+}
+
+// --------------------------------------------------------------------------- //
+// Core fetch wrapper
+// --------------------------------------------------------------------------- //
+export class ApiError extends Error {
+  constructor(
+    public status: number,
+    message: string,
+    public body?: unknown,
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
+export interface RequestOptions {
+  method?: string;
+  body?: unknown;
+  query?: Record<string, string | number | boolean | undefined>;
+  signal?: AbortSignal;
+}
+
+export async function apiFetch<T = unknown>(
+  path: string,
+  opts: RequestOptions = {},
+): Promise<T> {
+  const token = await validAccessToken();
+  if (!token) {
+    await login();
+    throw new ApiError(401, "not authenticated; redirecting to login");
+  }
+
+  const url = new URL(
+    path.startsWith("http") ? path : `${apiConfig.baseUrl}${path}`,
+    location.origin,
+  );
+  if (opts.query) {
+    for (const [k, v] of Object.entries(opts.query)) {
+      if (v !== undefined) url.searchParams.set(k, String(v));
+    }
+  }
+
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${token}`,
+    "X-Rewire-Audit": auditId(),
+    "X-Rewire-MFA": mfaLevel,
+    "Accept-Language": navigator.language || "pt-BR",
+    Accept: "application/json",
+  };
+  if (opts.body !== undefined) headers["Content-Type"] = "application/json";
+
+  const resp = await fetch(url.toString(), {
+    method: opts.method ?? (opts.body !== undefined ? "POST" : "GET"),
+    headers,
+    body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+    signal: opts.signal,
+  });
+
+  const text = await resp.text();
+  const parsed = text ? safeJson(text) : undefined;
+  if (!resp.ok) {
+    throw new ApiError(resp.status, `${resp.status} ${resp.statusText}`, parsed);
   }
   return parsed as T;
 }
 
-// ----- Domain endpoints --------------------------------------------------
-
-export interface ApiToken {
-  id: string;
-  name: string;
-  token_prefix: string;
-  scopes: string[];
-  last_used_at: string | null;
-  expires_at: string | null;
-  revoked_at: string | null;
-  created_at: string;
+function safeJson(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
 }
 
-export const apiTokens = {
-  list: () => api<ApiToken[]>("/api-tokens"),
-  create: (body: { name: string; scopes?: string[]; expires_at?: string | null }) =>
-    api<ApiToken & { token: string }>("/api-tokens", { method: "POST", body }),
-  revoke: (id: string) => api<void>(`/api-tokens/${id}`, { method: "DELETE" }),
+export const api = {
+  get: <T>(path: string, query?: RequestOptions["query"]) =>
+    apiFetch<T>(path, { method: "GET", query }),
+  post: <T>(path: string, body?: unknown) =>
+    apiFetch<T>(path, { method: "POST", body }),
+  put: <T>(path: string, body?: unknown) =>
+    apiFetch<T>(path, { method: "PUT", body }),
+  del: <T>(path: string) => apiFetch<T>(path, { method: "DELETE" }),
 };
 
-export interface EmailDomain {
-  id: string;
-  domain: string;
-  verified: boolean;
-  spf_status: string;
-  dmarc_status: string;
-  reputation_score: number;
-  created_at: string;
-  verified_at: string | null;
-  dns_instructions?: Array<{ type: string; name: string; value: string; purpose: string }>;
-}
-
-export const domains = {
-  list: () => api<EmailDomain[]>("/domains"),
-  create: (domain: string) => api<EmailDomain>("/domains", { method: "POST", body: { domain } }),
-  verify: (id: string) => api<EmailDomain>(`/domains/${id}/verify`, { method: "POST" }),
-};
-
-export const messages = {
-  sendEmail: (body: unknown) => api<{ message_id: string; status: string; chain_hash: string }>(
-    "/messages/email", { method: "POST", body },
-  ),
-  sendSms: (body: unknown) => api("/messages/sms", { method: "POST", body }),
-  sendPush: (body: unknown) => api("/messages/push", { method: "POST", body }),
-  sendWhatsapp: (body: unknown) => api("/messages/whatsapp", { method: "POST", body }),
-  timeline: (id: string) => api<{ message_id: string; events: unknown[] }>(`/analytics/messages/${id}/events`),
-};
-
-export interface SuppressionEntry {
-  id: string;
-  identifier_type: string;
-  identifier_value: string;
-  reason: string;
-  source_channel: string | null;
-  created_at: string;
-}
-
-export const suppression = {
-  list: (params?: { identifier_type?: string; limit?: number; offset?: number }) =>
-    api<SuppressionEntry[]>(`/suppression${params ? "?" + new URLSearchParams(params as Record<string, string>).toString() : ""}`),
-  add: (body: { identifier_type: string; identifier_value: string; reason?: string }) =>
-    api<SuppressionEntry>("/suppression", { method: "POST", body }),
-  remove: (id: string) => api<void>(`/suppression/${id}`, { method: "DELETE" }),
-};
-
-export const analytics = {
-  summary: (params: { from?: string; to?: string; channel?: string }) => {
-    const q = new URLSearchParams();
-    if (params.from) q.set("from", params.from);
-    if (params.to) q.set("to", params.to);
-    if (params.channel) q.set("channel", params.channel);
-    return api<{ from: string; to: string; rows: Array<Record<string, unknown>> }>(`/analytics/messages?${q.toString()}`);
-  },
-};
-
-export const billing = {
-  usageMtd: () => api<{ month_starting: string; counts: Record<string, number> }>("/billing/usage-mtd"),
-  invoices: () => api<{ invoices: unknown[] }>("/billing/invoices"),
-  pricing: () => api<{ pricing: unknown; currency: string }>("/billing/pricing"),
-};
-
-export const lgpd = {
-  requestDsar: (body: { subject_email?: string; subject_phone?: string }) =>
-    api<{ id: string; status: string; eta_hours: number }>("/audit/lgpd/dsar", { method: "POST", body }),
-  getDsar: (id: string) => api<{ id: string; status: string }>(`/audit/lgpd/dsar/${id}`),
-};
-
-export const journeys = {
-  list: () => api<Array<{ id: string; name: string; status: string }>>("/journeys"),
-  create: (body: unknown) => api<{ id: string; status: string }>("/journeys", { method: "POST", body }),
-  pause: (id: string) => api(`/journeys/${id}/pause`, { method: "POST" }),
-  resume: (id: string) => api(`/journeys/${id}/resume`, { method: "POST" }),
-};
-
-export const pushApps = {
-  list: () => api<Array<{ id: string; name: string; platform: string }>>("/push-apps"),
-  create: (body: unknown) => api("/push-apps", { method: "POST", body }),
-  remove: (id: string) => api<void>(`/push-apps/${id}`, { method: "DELETE" }),
-};
-
-export const webpush = {
-  getVapidPublicKey: () => api<{ public_key: string }>("/webpush/vapid-public-key"),
-  subscribe: (sub: PushSubscriptionJSON) =>
-    api("/webpush/subscriptions", { method: "POST", body: sub }),
-};
-
-// ----- Phase-13 UI wiring (BCN-230..248) extra surfaces -----------------
-// These mirror endpoints exposed by the FastAPI control plane. Pages fall
-// back to `@/content/beacon-mock` when the backend responds non-OK; the
-// `useBeacon*` hooks in `@/lib/hooks/useBeacon.ts` orchestrate that
-// graceful degradation with a "Modo demo" banner.
-
-export interface OverviewSummary {
-  mtd_email: number;
-  mtd_sms: number;
-  mtd_push: number;
-  mtd_wa: number;
-  mtd_spend_brl: number;
-  delivered_rate: number;
-  open_rate_email: number;
-  verified_domains: number;
-  total_domains: number;
-  generated_at: string;
-}
-
-export const overview = {
-  get: () => api<OverviewSummary>("/overview"),
-};
-
-export const templates = {
-  list: () => api<Array<{ id: string; name: string; channel: string; enabled: boolean }>>("/templates"),
-  get: (id: string) => api<{ id: string; name: string; body: string }>(`/templates/${id}`),
-  upsert: (body: unknown) => api("/templates", { method: "POST", body }),
-  remove: (id: string) => api<void>(`/templates/${id}`, { method: "DELETE" }),
-};
-
-export const smsNumbers = {
-  list: () => api<Array<{ id: string; number: string; country: string; status: string }>>("/sms-numbers"),
-};
-
-export const whatsapp = {
-  status: () => api<{ connected: boolean; quality_rating: string; templates_synced: number }>("/whatsapp"),
-  templates: () => api<Array<{ id: string; name: string; category: string; status: string }>>("/whatsapp/templates"),
-};
-
-export const webhooksMgmt = {
-  list: () => api<Array<{ id: string; url: string; events: string[]; status: string }>>("/webhooks"),
-  create: (body: unknown) => api("/webhooks", { method: "POST", body }),
-  remove: (id: string) => api<void>(`/webhooks/${id}`, { method: "DELETE" }),
-};
-
-export const team = {
-  list: () => api<Array<{ id: string; email: string; role: string }>>("/team"),
-};
-
-export const settings = {
-  get: () => api<{ org: Record<string, unknown> }>("/settings"),
-  update: (body: unknown) => api("/settings", { method: "PATCH", body }),
-};
-
-export const chain = {
-  list: (params?: { limit?: number }) =>
-    api<{ entries: Array<{ hash: string; ref: string | null; created_at: string }> }>(
-      `/chain${params ? "?" + new URLSearchParams(params as Record<string, string>).toString() : ""}`,
-    ),
-  verify: (hash: string) => api<{ valid: boolean; anchored_at: string | null }>(`/chain/${hash}/verify`),
-};
-
-export const deliverability = {
-  reputation: () =>
-    api<{ ip_pool_score: number; domain_score: number; mailbox_provider_scores: Record<string, number> }>(
-      "/deliverability/reputation",
-    ),
-};
-
-export const antispam = {
-  scores: () =>
-    api<{ tenant_score: number; flagged_24h: number; samples: Array<Record<string, unknown>> }>(
-      "/antispam/scores",
-    ),
-};
-
-// ----- MSG-IMPL-002 (Lote 8): A/B tests + segments + notifications dispatcher
-
-export interface AbVariant {
-  id: string;
-  name: string;
-  weight: number;
-  template_slug: string;
-  subject_override?: string | null;
-}
-
-export interface AbTest {
-  id: string;
-  name: string;
-  channel: "email" | "sms" | "push" | "whatsapp";
-  status: string;
-  primary_metric: "delivered" | "opened" | "clicked" | "unsubscribed";
-  variants: AbVariant[];
-  created_at: string;
-}
-
-export interface AbAssignResponse {
-  test_id: string;
-  variant_id: string;
-  variant_name: string;
-  template_slug: string;
-  subject_override?: string | null;
-}
-
-export interface AbVariantResult {
-  variant_id: string;
-  name: string;
-  delivered: number;
-  opened: number;
-  clicked: number;
-  unsubscribed: number;
-  ctr: number;
-  is_winner: boolean;
-}
-
-export interface AbResults {
-  test_id: string;
-  name: string;
-  primary_metric: string;
-  total_assignments: number;
-  confidence: number;
-  has_significant_winner: boolean;
-  variants: AbVariantResult[];
-}
-
-export const abTests = {
-  list: () => api<AbTest[]>("/ab-tests"),
-  get: (id: string) => api<AbTest>(`/ab-tests/${id}`),
-  create: (body: {
-    name: string;
-    channel: AbTest["channel"];
-    variants: Array<Omit<AbVariant, "id">>;
-    audience_segment_id?: string | null;
-    primary_metric?: AbTest["primary_metric"];
-    min_sample_size?: number;
-  }) => api<AbTest>("/ab-tests", { method: "POST", body }),
-  assign: (id: string, recipient: string) =>
-    api<AbAssignResponse>(`/ab-tests/${id}/assign`, { method: "POST", body: { recipient } }),
-  recordEvent: (id: string, variant_id: string, event: AbVariantResult["name"] | string) =>
-    api<void>(`/ab-tests/${id}/event`, { method: "POST", body: { variant_id, event } }),
-  results: (id: string) => api<AbResults>(`/ab-tests/${id}/results`),
-};
-
-export interface Segment {
-  id: string;
-  name: string;
-  description: string | null;
-  channel: "email" | "sms" | "push" | "whatsapp" | "any";
-  attributes: Record<string, unknown>;
-  include_tags: string[];
-  exclude_tags: string[];
-  consent_basis: "consent" | "contract" | "legal_obligation" | "legitimate_interest";
-  estimated_size: number;
-  created_at: string;
-  updated_at: string;
-}
-
-export const segments = {
-  list: () => api<Segment[]>("/segments"),
-  get: (id: string) => api<Segment>(`/segments/${id}`),
-  create: (body: {
-    name: string;
-    description?: string | null;
-    channel?: Segment["channel"];
-    attributes?: Record<string, unknown>;
-    include_tags?: string[];
-    exclude_tags?: string[];
-    consent_basis?: Segment["consent_basis"];
-  }) => api<Segment>("/segments", { method: "POST", body }),
-  update: (
-    id: string,
-    body: Partial<Pick<Segment, "name" | "description" | "attributes" | "include_tags" | "exclude_tags">>,
-  ) => api<Segment>(`/segments/${id}`, { method: "PATCH", body }),
-  remove: (id: string) => api<void>(`/segments/${id}`, { method: "DELETE" }),
-  estimate: (id: string) =>
-    api<{ segment_id: string; estimated_size: number; sample_recipients: string[]; computed_at: string }>(
-      `/segments/${id}/estimate`,
-      { method: "POST" },
-    ),
-};
-
-export interface NotificationCreateBody {
-  channel: "email" | "sms" | "whatsapp" | "push_mobile" | "push_web";
-  recipient: string;
-  template_id?: string;
-  body?: string;
-  subject?: string;
-  sender?: string;
-  consent_basis?: "consent" | "contract" | "legal_obligation" | "legitimate_interest";
-  metadata?: Record<string, string>;
-  push_title?: string;
-  push_app_id?: string;
-  template_vars?: Record<string, string>;
-}
-
-export interface NotificationAccepted {
-  notification_id: string;
-  status: string;
-  channel: string;
-  chain_hash: string;
-  provider_route: string;
-}
-
-export const notifications = {
-  send: (body: NotificationCreateBody) =>
-    api<NotificationAccepted>("/notifications", { method: "POST", body }),
-  channels: () =>
-    api<{ organization_id: string | null; channels: Array<{ id: string; enabled: boolean; provider: string }> }>(
-      "/channels",
-    ),
-};
+// Silence "unused" on the ambient declaration in environments without Vite.
+void importMetaEnv;
