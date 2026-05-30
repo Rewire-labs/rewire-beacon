@@ -4,7 +4,8 @@ import BeaconSidebar from "./BeaconSidebar";
 
 export default function BeaconShell() {
   return (
-    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 font-sans">
+    {/* RW-FE-MESSAGING-10: canonical bg-background/text-foreground tokens (no hard-coded zinc). */}
+    <div className="min-h-screen bg-background text-foreground font-sans">
       <BeaconTopbar />
       <div className="flex">
         <BeaconSidebar />

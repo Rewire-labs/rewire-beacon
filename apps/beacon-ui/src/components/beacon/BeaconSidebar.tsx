@@ -46,11 +46,12 @@ const NAV: Array<{ group: string; items: NavItem[] }> = [
 
 export default function BeaconSidebar() {
   return (
-    <aside className="w-60 shrink-0 border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 min-h-[calc(100vh-3.5rem)] sticky top-14 self-start">
+    {/* RW-FE-MESSAGING-10: canonical tokens (no hard-coded zinc). */}
+    <aside className="w-60 shrink-0 border-r border-border bg-card min-h-[calc(100vh-3.5rem)] sticky top-14 self-start">
       <nav className="py-4 px-2 space-y-4">
         {NAV.map((g) => (
           <div key={g.group}>
-            <p className="px-3 mb-1.5 text-[10px] uppercase tracking-wider font-semibold text-zinc-400">{g.group}</p>
+            <p className="px-3 mb-1.5 text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">{g.group}</p>
             <div className="space-y-0.5">
               {g.items.map(({ to, label, icon: Icon, end = false, badge }) => (
                 <NavLink
@@ -61,7 +62,7 @@ export default function BeaconSidebar() {
                     `flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition ${
                       isActive
                         ? "bg-accent/10 text-accent font-semibold"
-                        : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-zinc-100"
+                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
                     }`
                   }
                 >
@@ -78,8 +79,8 @@ export default function BeaconSidebar() {
       </nav>
       <div className="mx-3 mt-4 mb-6 p-3 rounded-lg bg-gradient-to-br from-accent/10 to-primary/10 border border-accent/20">
         <p className="text-[10px] uppercase tracking-wider font-semibold text-accent mb-1">Cluster</p>
-        <p className="text-xs font-bold text-zinc-900 dark:text-zinc-100">br-sp1 · São Paulo</p>
-        <p className="text-[10px] text-zinc-500 mt-0.5">Postal · Kafka · ClickHouse · Temporal</p>
+        <p className="text-xs font-bold text-foreground">br-sp1 · São Paulo</p>
+        <p className="text-[10px] text-muted-foreground mt-0.5">Postal · Kafka · ClickHouse · Temporal</p>
       </div>
     </aside>
   );
