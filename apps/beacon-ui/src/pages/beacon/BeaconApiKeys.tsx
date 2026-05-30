@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
-import { PageHeader, PageContainer, Card, Badge, Table, Th, Td, timeAgo } from "@/components/beacon/ui";
+import { PageHeader, PageContainer, Card, Table, Th, Td, timeAgo } from "@/components/beacon/ui";
 import { DemoBanner } from "@/components/beacon/DemoBanner";
-import { apiTokens, type ApiToken, ApiError } from "@/lib/api";
+import { apiTokens, type ApiToken } from "@/lib/api";
 import { API_KEYS } from "@/content/beacon-mock";
 import { useBeaconApiKeys } from "@/lib/hooks/useBeacon";
-import { Plus, KeyRound, Copy, Eye, Trash2 } from "lucide-react";
+import { Plus, KeyRound, Copy, Trash2 } from "lucide-react";
 
 // BCN-241: BeaconApiKeys — keep useState/useEffect for mutations; TanStack
 // hook drives the demo banner.
@@ -24,11 +24,7 @@ export default function BeaconApiKeys() {
       setTokens(list);
       setError(null);
     } catch (e) {
-      // Fall back to mock when API unreachable in dev.
-      if (e instanceof ApiError && e.status === 0) {
-        setTokens([]);
-        setError("API offline — showing mock data");
-      } else if (e instanceof Error) {
+      if (e instanceof Error) {
         setError(e.message);
       }
     } finally {
@@ -63,10 +59,15 @@ export default function BeaconApiKeys() {
     }
   }
 
-  const rows = tokens.length ? tokens : API_KEYS.map((k) => ({
-    id: k.id, name: k.name, token_prefix: k.prefix, scopes: k.scopes,
-    last_used_at: k.last_used, expires_at: null, revoked_at: null, created_at: k.created_at,
-  } as ApiToken));
+  const rows: ApiToken[] = tokens.length
+    ? tokens
+    : API_KEYS.map((k) => ({
+        id: k.id,
+        name: k.name,
+        token_prefix: k.prefix,
+        created_at: k.created_at,
+        last_used_at: k.last_used ?? null,
+      }));
 
   return (
     <PageContainer>
@@ -138,11 +139,7 @@ export default function BeaconApiKeys() {
               <tr key={k.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-900/40">
                 <Td className="font-medium text-sm flex items-center gap-2"><KeyRound size={13} className="text-zinc-400" /> {k.name}</Td>
                 <Td className="font-mono text-xs">{k.token_prefix}</Td>
-                <Td className="text-xs">
-                  <div className="flex flex-wrap gap-1">
-                    {k.scopes.map((s) => <Badge key={s} tone="accent">{s}</Badge>)}
-                  </div>
-                </Td>
+                <Td></Td>
                 <Td className="text-xs text-zinc-500">{timeAgo(k.created_at)}</Td>
                 <Td className="text-xs text-zinc-500">{k.last_used_at ? timeAgo(k.last_used_at) : "nunca"}</Td>
                 <Td>

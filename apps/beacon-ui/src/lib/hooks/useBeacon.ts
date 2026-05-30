@@ -15,7 +15,6 @@
 
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import * as api from "@/lib/api";
-import { api as rawApi } from "@/lib/api";
 import * as mock from "@/content/beacon-mock";
 
 export interface DemoEnvelope<T> {
@@ -81,7 +80,7 @@ export function useBeaconTemplates() {
     retry: 1,
     staleTime: 60_000,
   });
-  return envelope(q, mock.TEMPLATES as unknown as Array<{ id: string; name: string; channel: string; enabled: boolean }>);
+  return envelope(q, mock.TEMPLATES as unknown as api.Template[]);
 }
 
 // ----- BCN-233: Journeys ----------------------------------------------------
@@ -133,7 +132,7 @@ export function useBeaconSmsNumbers() {
     retry: 1,
     staleTime: 60_000,
   });
-  return envelope(q, (mock.SMS_NUMBERS ?? []) as unknown as Array<{ id: string; number: string; country: string; status: string }>);
+  return envelope(q, (mock.SMS_NUMBERS ?? []) as unknown as api.SmsNumber[]);
 }
 
 // ----- BCN-237: WhatsApp ----------------------------------------------------
@@ -220,7 +219,7 @@ export function useBeaconLgpd() {
   // we render the mock journey of opened DSARs.
   const q = useQuery({
     queryKey: ["beacon-lgpd-dsars"],
-    queryFn: () => rawApi<{ dsars: Array<Record<string, unknown>> }>("/audit/lgpd/dsar"),
+    queryFn: () => api.lgpd.listDsars(),
     retry: 1,
     staleTime: 60_000,
   });
@@ -318,13 +317,13 @@ export function useBeaconSettings() {
     staleTime: 60_000,
   });
   return envelope(q, {
-    org: {
-      name: mock.BEACON_USER.org,
-      cnpj: mock.BEACON_USER.cnpj,
-      tier: mock.BEACON_USER.tier,
-      region: mock.BEACON_USER.region,
-    } as Record<string, unknown>,
-  });
+    workspace_name: mock.BEACON_USER.org,
+    default_locale: "pt-BR",
+    timezone: "America/Sao_Paulo",
+    quiet_hours_start: null,
+    quiet_hours_end: null,
+    rate_limit_per_minute: 1000,
+  } as api.WorkspaceSettings);
 }
 
 // ----- BCN-248: Team --------------------------------------------------------

@@ -3,7 +3,7 @@ import { PageHeader, PageContainer, Card, Kpi, Badge, StatusDot, timeAgo } from 
 import { DemoBanner } from "@/components/beacon/DemoBanner";
 import { BEACON_USER, MESSAGES, ANALYTICS_30D, JOURNEYS, DOMAINS, CROSS_SELL, CHANNEL_LABELS, type Channel } from "@/content/beacon-mock";
 import { useBeaconOverview } from "@/lib/hooks/useBeacon";
-import { Send, Plus, Mail, MessageSquare, Smartphone, BarChart3, Globe, Workflow } from "lucide-react";
+import { Send, Plus, BarChart3, Workflow } from "lucide-react";
 
 // BCN-230: BeaconOverview wired to /v1/overview via useBeaconOverview hook.
 // Falls back to mock content with a "Modo demo" banner when the backend is

@@ -1,13 +1,18 @@
 import { NavLink } from "react-router-dom";
 import {
   LayoutDashboard, Send, FileText, Workflow, Ban, Globe, MessageSquare, Smartphone,
-  BellRing, BarChart3, Webhook, Shield, AlertTriangle, KeyRound, FileCheck, Link2,
+  BellRing, BarChart3, Webhook, AlertTriangle, KeyRound, FileCheck, Link2,
   Receipt, Users, Settings as SettingsIcon, Mail,
 } from "lucide-react";
+import type { ForwardRefExoticComponent, RefAttributes } from "react";
+import type { LucideProps } from "lucide-react";
+
+type NavIcon = ForwardRefExoticComponent<Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>>;
+interface NavItem { to: string; label: string; icon: NavIcon; end?: boolean; badge?: string }
 
 const BASE = "/app/produtos/beacon";
 
-const NAV = [
+const NAV: Array<{ group: string; items: NavItem[] }> = [
   { group: "Visão", items: [
     { to: "", label: "Overview", icon: LayoutDashboard, end: true },
   ]},
@@ -47,7 +52,7 @@ export default function BeaconSidebar() {
           <div key={g.group}>
             <p className="px-3 mb-1.5 text-[10px] uppercase tracking-wider font-semibold text-zinc-400">{g.group}</p>
             <div className="space-y-0.5">
-              {g.items.map(({ to, label, icon: Icon, end, badge }) => (
+              {g.items.map(({ to, label, icon: Icon, end = false, badge }) => (
                 <NavLink
                   key={to}
                   to={`${BASE}/${to}`.replace(/\/$/, "")}
